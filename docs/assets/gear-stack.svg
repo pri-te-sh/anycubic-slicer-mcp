@@ -1,10 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-280 -200 560 420" role="img" aria-label="A gear building up layer by layer: blue walls and gyroid infill">
-  <style>
-    @media (prefers-color-scheme: dark) {
-      .face { fill: #0d1730; } .under { fill: #0a1226; } .bg { fill: #000000; }
-      .ink { fill: #f5f5f7; } .grey { fill: #a1a1a6; } .accent { fill: #3d82ff; }
-    }
-  </style>
+  
   <defs><radialGradient id="sg" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#005aff" stop-opacity="0.16"/><stop offset="1" stop-color="#005aff" stop-opacity="0"/></radialGradient></defs>
   <ellipse cx="0" cy="40" rx="275" ry="160" fill="url(#sg)"/>
   <g transform="scale(1,0.62) rotate(-8)">

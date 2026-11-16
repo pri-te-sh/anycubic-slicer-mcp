@@ -6,7 +6,7 @@
 Writes to docs/assets/:
   hero.svg         1280x640 README banner; the gear's layers stack up and a nozzle traces the outer wall
   hero-static.svg  the same banner without animation, for the social preview PNG
-  gear-stack.svg   the stacked gear on its own, for the website hero
+  gear-stack.svg   the stacked gear on its own, for the website hero (gear-stack-dark.svg for dark mode)
 
 The gear matches examples/make_gear.py: 24 teeth, root R26, tip R30, six 9.2 mm holes, 8 mm keyed bore.
 """
@@ -163,10 +163,17 @@ def hero(animated: bool = True) -> str:
 """
 
 
-def gear_stack() -> str:
+DARK_FIXED = """<style>
+    .face { fill: #0d1730; } .under { fill: #0a1226; }
+  </style>"""
+
+
+def gear_stack(theme: str = "light") -> str:
+    """The website hero picture. The page picks the light or dark file to match its own theme toggle,
+    so neither file follows the system setting on its own."""
     scale = 8
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="-280 -200 560 420" role="img" aria-label="A gear building up layer by layer: blue walls and gyroid infill">
-  {DARK}
+  {DARK_FIXED if theme == "dark" else ""}
   <defs><radialGradient id="sg" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="{ACCENT}" stop-opacity="0.16"/><stop offset="1" stop-color="{ACCENT}" stop-opacity="0"/></radialGradient></defs>
   <ellipse cx="0" cy="40" rx="275" ry="160" fill="url(#sg)"/>
   <g transform="scale(1,0.62) rotate(-8)">
@@ -179,7 +186,8 @@ def gear_stack() -> str:
 
 if __name__ == "__main__":
     ASSETS.mkdir(parents=True, exist_ok=True)
-    files = {"hero.svg": hero(), "hero-static.svg": hero(animated=False), "gear-stack.svg": gear_stack()}
+    files = {"hero.svg": hero(), "hero-static.svg": hero(animated=False), "gear-stack.svg": gear_stack(),
+             "gear-stack-dark.svg": gear_stack("dark")}
     for name, svg in files.items():
         (ASSETS / name).write_text(svg, encoding="utf-8")
         print(name, len(svg.encode()), "bytes")
