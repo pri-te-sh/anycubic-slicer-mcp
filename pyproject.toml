@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "anycubic-slicer-mcp"
+version = "1.0.0"
+description = "MCP server that lets AI agents slice, preview, diagnose and optimise 3D prints with Anycubic Slicer Next (Windows and macOS)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "pcb" }]
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.20,<2",
+    "numpy>=1.24",
+    "pillow>=10.1",
+]
+keywords = ["mcp", "model-context-protocol", "anycubic", "anycubic-slicer-next", "kobra", "3d-printing",
+            "slicer", "gcode", "ai", "claude", "cursor", "antigravity"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Printing",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+[project.urls]
+Homepage = "https://pri-te-sh.github.io/anycubic-slicer-mcp/"
+Repository = "https://github.com/pri-te-sh/anycubic-slicer-mcp"
+Issues = "https://github.com/pri-te-sh/anycubic-slicer-mcp/issues"
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+anycubic-slicer-mcp = "anycubic_slicer_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["anycubic_slicer_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

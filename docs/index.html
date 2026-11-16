@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<script>document.documentElement.classList.replace("no-js", "js")</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anycubic Slicer MCP: let your AI agent slice and tune 3D prints</title>
+<meta name="description" content="Anycubic Slicer MCP is a free, open-source MCP server for Anycubic Slicer Next on Windows and macOS. Claude, Cursor, Codex and other AI agents can slice STL, 3MF and STEP files, preview G-code, build filament profiles from a label photo, diagnose failed prints and cut multi-colour waste.">
+<meta name="keywords" content="Anycubic Slicer MCP, Anycubic Slicer Next, MCP server, Model Context Protocol, Kobra, 3D printing AI, slicer automation, G-code preview, Claude 3D printing, filament profile">
+<link rel="canonical" href="https://pri-te-sh.github.io/anycubic-slicer-mcp/">
+<meta name="theme-color" content="#fbfbfd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Anycubic Slicer MCP">
+<meta property="og:description" content="Your AI agent slices, checks and tunes your 3D prints with Anycubic Slicer Next. You still press print.">
+<meta property="og:url" content="https://pri-te-sh.github.io/anycubic-slicer-mcp/">
+<meta property="og:image" content="https://pri-te-sh.github.io/anycubic-slicer-mcp/assets/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Anycubic Slicer MCP">
+<meta name="twitter:description" content="Your AI agent slices, checks and tunes your 3D prints with Anycubic Slicer Next. You still press print.">
+<meta name="twitter:image" content="https://pri-te-sh.github.io/anycubic-slicer-mcp/assets/social-preview.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Anycubic Slicer MCP",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Windows, macOS",
+  "description": "An MCP server that lets AI agents slice, preview, diagnose and optimise 3D prints with Anycubic Slicer Next.",
+  "url": "https://pri-te-sh.github.io/anycubic-slicer-mcp/",
+  "codeRepository": "https://github.com/pri-te-sh/anycubic-slicer-mcp",
+  "license": "https://opensource.org/licenses/MIT",
+  "softwareVersion": "1.0.0",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "pcb", "url": "https://github.com/pri-te-sh" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Does Anycubic Slicer MCP send anything to my printer?", "acceptedAnswer": {"@type": "Answer", "text": "No. It slices on your computer and writes G-code and .gcode.3mf files. You send them to the printer yourself."}},
+    {"@type": "Question", "name": "Which printers does it support?", "acceptedAnswer": {"@type": "Answer", "text": "Any printer that has a preset in Anycubic Slicer Next, because it reads the slicer's own presets. It has been tested end to end on a Kobra X with a 0.4 mm nozzle."}},
+    {"@type": "Question", "name": "Which AI apps can use it?", "acceptedAnswer": {"@type": "Answer", "text": "Any app that speaks the Model Context Protocol over stdio, including Claude Code, Claude Desktop, Cursor, VS Code, Codex and Antigravity."}},
+    {"@type": "Question", "name": "Is it an official Anycubic product?", "acceptedAnswer": {"@type": "Answer", "text": "No. It is an independent open-source project under the MIT licence and is not affiliated with Anycubic."}}
+  ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --accent: #005aff;
+  --accent-hover: #0047cc;
+  --accent-soft: rgba(0, 90, 255, .08);
+  --accent-glow: rgba(0, 90, 255, .18);
+  --bg: #fbfbfd;
+  --bg-alt: #f5f5f7;
+  --card: #ffffff;
+  --ink: #1d1d1f;
+  --ink-2: #424245;
+  --muted: #6e6e73;
+  --line: rgba(0, 0, 0, .08);
+  --stage: #111216;
+  --code-bg: #f5f5f7;
+  --nav: rgba(251, 251, 253, .72);
+  --shadow: 0 2px 6px rgba(0,0,0,.04), 0 20px 50px rgba(0,0,0,.06);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent: #3d82ff; --accent-hover: #6b9fff; --accent-soft: rgba(61,130,255,.14); --accent-glow: rgba(61,130,255,.25);
+    --bg: #000000; --bg-alt: #0d0d0f; --card: #161618; --ink: #f5f5f7; --ink-2: #d2d2d7; --muted: #a1a1a6;
+    --line: rgba(255,255,255,.1); --code-bg: #1c1c1f; --nav: rgba(0,0,0,.7); --shadow: 0 0 0 1px rgba(255,255,255,.06);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --accent: #3d82ff; --accent-hover: #6b9fff; --accent-soft: rgba(61,130,255,.14); --accent-glow: rgba(61,130,255,.25);
+  --bg: #000000; --bg-alt: #0d0d0f; --card: #161618; --ink: #f5f5f7; --ink-2: #d2d2d7; --muted: #a1a1a6;
+  --line: rgba(255,255,255,.1); --code-bg: #1c1c1f; --nav: rgba(0,0,0,.7); --shadow: 0 0 0 1px rgba(255,255,255,.06);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; letter-spacing: -.01em; overflow-x: hidden; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { max-width: 100%; height: auto; display: block; }
+code, pre { font-family: var(--mono); font-size: .86em; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 22px; }
+.narrow { max-width: 760px; }
+.skip { position: absolute; left: -999px; top: 8px; background: var(--card); padding: 8px 12px; border-radius: 8px; z-index: 99; }
+.skip:focus { left: 8px; }
+
+/* nav */
+nav.top { position: sticky; top: 0; z-index: 50; background: var(--nav); backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--line); }
+nav.top .wrap { display: flex; align-items: center; height: 52px; gap: 28px; }
+nav.top .name { font-weight: 600; font-size: 17px; color: var(--ink); letter-spacing: -.02em; white-space: nowrap; }
+nav.top .links { display: flex; gap: 24px; margin-left: auto; font-size: 13px; }
+nav.top .links a { color: var(--ink-2); }
+nav.top .links a:hover { color: var(--ink); text-decoration: none; }
+nav.top .cta { font-size: 12px; padding: 5px 12px; }
+@media (max-width: 720px) { nav.top .links { display: none; } nav.top .cta { margin-left: auto; } }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer; font: inherit; font-size: 17px;
+  border-radius: 980px; padding: 12px 22px; transition: background .2s, transform .2s, box-shadow .2s; text-decoration: none !important; }
+.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 8px 24px var(--accent-glow); }
+.btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.btn-secondary { background: var(--accent-soft); color: var(--accent); }
+.btn-secondary:hover { background: var(--accent-glow); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn.done { background: #1f9d55; color: #fff; box-shadow: none; }
+.link-arrow::after { content: " \203A"; }
+
+/* hero */
+.hero { position: relative; padding: 88px 0 40px; text-align: center; overflow: hidden; }
+.hero::before { content: ""; position: absolute; inset: -20% -10% auto; height: 760px; pointer-events: none;
+  background: radial-gradient(50% 50% at 50% 55%, var(--accent-soft), transparent 70%); }
+.eyebrow { color: var(--accent); font-weight: 600; font-size: 17px; margin: 0 0 10px; letter-spacing: 0; }
+h1 { font-size: clamp(44px, 8vw, 88px); line-height: 1.04; letter-spacing: -.045em; margin: 0; font-weight: 700; }
+h1 .grad { background: linear-gradient(100deg, var(--ink) 30%, var(--accent) 95%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lede { font-size: clamp(19px, 2.4vw, 25px); line-height: 1.4; color: var(--muted); max-width: 720px; margin: 22px auto 0; letter-spacing: -.015em; }
+.lede strong { color: var(--ink); font-weight: 600; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 34px; }
+.hero-note { margin-top: 18px; font-size: 14px; color: var(--muted); }
+.hero-note a { white-space: nowrap; }
+.hero-art { position: relative; max-width: 640px; margin: 24px auto 0; perspective: 1200px; }
+.hero-art img { width: 100%; transform-origin: 50% 60%; will-change: transform; }
+.clients { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; margin: 6px auto 0; color: var(--muted); font-size: 14px; }
+.clients span { white-space: nowrap; }
+
+/* sections */
+section { padding: 110px 0; }
+section.alt { background: var(--bg-alt); }
+.kicker { color: var(--accent); font-weight: 600; font-size: 17px; margin: 0 0 8px; }
+h2 { font-size: clamp(34px, 5.4vw, 56px); line-height: 1.07; letter-spacing: -.035em; margin: 0; font-weight: 700; }
+h3 { font-size: 24px; line-height: 1.2; letter-spacing: -.02em; margin: 0 0 10px; }
+.section-head { text-align: center; max-width: 780px; margin: 0 auto 56px; }
+.section-head p { color: var(--muted); font-size: 21px; line-height: 1.45; margin: 18px 0 0; }
+
+/* reveal */
+.js .reveal { opacity: 0; transform: translateY(28px); transition: opacity .9s cubic-bezier(.2,.7,.2,1), transform .9s cubic-bezier(.2,.7,.2,1); }
+.js .reveal.in { opacity: 1; transform: none; }
+.rise { animation: rise 1s cubic-bezier(.2,.7,.2,1) both; }
+.rise.d1 { animation-delay: .08s; } .rise.d2 { animation-delay: .16s; } .rise.d3 { animation-delay: .24s; }
+@keyframes rise { from { opacity: 0; transform: translateY(24px); } }
+.reveal.d1 { transition-delay: .08s; } .reveal.d2 { transition-delay: .16s; } .reveal.d3 { transition-delay: .24s; }
+
+/* chat demo */
+.chat { max-width: 820px; margin: 0 auto; background: var(--card); border-radius: 28px; box-shadow: var(--shadow); padding: 28px; }
+.msg { display: flex; gap: 12px; margin-bottom: 18px; }
+.msg .who { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+.msg.user .who { background: var(--bg-alt); color: var(--ink-2); }
+.msg.agent .who { background: var(--accent); color: #fff; }
+.msg .body { padding-top: 4px; min-width: 0; }
+.call { display: inline-block; font-family: var(--mono); font-size: 13px; background: var(--accent-soft); color: var(--accent);
+  border-radius: 8px; padding: 4px 9px; margin: 2px 0 10px; overflow-wrap: anywhere; }
+.result { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; align-items: start; }
+.result img { border-radius: 16px; background: var(--stage); }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 15px; margin: 0; }
+.facts dt { color: var(--muted); } .facts dd { margin: 0; font-weight: 600; }
+.typing::after { content: "\2588"; animation: blink 1s steps(1) infinite; color: var(--accent); margin-left: 2px; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (max-width: 640px) { .result { grid-template-columns: 1fr; } .chat { padding: 20px; border-radius: 22px; } }
+
+/* scroll story */
+.story { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; }
+.story .steps > div { min-height: 62vh; display: flex; flex-direction: column; justify-content: center; opacity: .3; transition: opacity .5s; }
+.story .steps > div.on { opacity: 1; }
+.story .steps p { color: var(--muted); font-size: 19px; margin: 0; }
+.story .steps code { color: var(--accent); }
+.story .stage { position: sticky; top: 90px; height: min(78vh, 560px); align-self: start; border-radius: 30px; background: var(--stage);
+  overflow: hidden; box-shadow: var(--shadow); }
+.story .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transform: scale(1.04);
+  transition: opacity .7s ease, transform 1.2s ease; padding: 18px; }
+.story .stage img.on { opacity: 1; transform: none; }
+@media (max-width: 820px) {
+  .story { grid-template-columns: 1fr; gap: 0; }
+  .story .stage { position: sticky; top: 64px; height: 46vh; z-index: 1; }
+  .story .steps > div { min-height: 48vh; }
+}
+
+/* bento */
+.bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 20px; }
+.tile { background: var(--card); border-radius: 28px; padding: 34px; box-shadow: var(--shadow); position: relative; overflow: hidden;
+  grid-column: span 3; display: flex; flex-direction: column; transition: transform .4s cubic-bezier(.2,.7,.2,1); }
+.tile:hover { transform: translateY(-4px); }
+.tile.wide { grid-column: span 6; }
+.tile.third { grid-column: span 2; }
+.tile p { color: var(--muted); margin: 0; }
+.tile .tools { margin-top: auto; padding-top: 22px; display: flex; flex-wrap: wrap; gap: 6px; }
+.tile .tools code { font-size: 12px; background: var(--accent-soft); color: var(--accent); padding: 4px 9px; border-radius: 980px; }
+.tile .big { font-size: 64px; font-weight: 700; letter-spacing: -.04em; line-height: 1; color: var(--accent); margin-bottom: 14px; }
+.tile .glyph { width: 44px; height: 44px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin-bottom: 20px; }
+.tile .glyph svg { width: 24px; height: 24px; }
+.tile.blue { background: linear-gradient(150deg, #005aff, #003fb3); color: #fff; }
+.tile.blue p { color: rgba(255,255,255,.82); }
+.tile.blue .tools code { background: rgba(255,255,255,.16); color: #fff; }
+.tile.blue .glyph { background: rgba(255,255,255,.16); color: #fff; }
+.tile.split { display: grid; grid-template-columns: 1.1fr 1fr; gap: 30px; align-items: center; }
+.tile.split img { border-radius: 18px; background: var(--stage); }
+.tile.split > *, .result > *, .story > *, .toolgroups > *, .msg .body { min-width: 0; }
+.waste-bar { margin-top: 22px; height: 14px; border-radius: 980px; background: var(--bg-alt); overflow: hidden; display: flex; }
+.waste-bar i { display: block; height: 100%; width: 0; transition: width 1.6s cubic-bezier(.2,.7,.2,1); }
+.waste-bar .model { background: var(--accent); } .waste-bar .purge { background: #ff9f0a; }
+.waste-legend { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin-top: 10px; flex-wrap: wrap; }
+.waste-legend b { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+@media (max-width: 900px) { .tile, .tile.third { grid-column: span 6; } .tile.split { grid-template-columns: 1fr; } }
+
+/* numbers */
+.numbers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; text-align: center; }
+.numbers .n { font-size: clamp(44px, 6vw, 72px); font-weight: 700; letter-spacing: -.045em; line-height: 1; color: var(--ink); }
+.numbers .n.accent { color: var(--accent); }
+.numbers p { color: var(--muted); margin: 10px 0 0; font-size: 15px; }
+@media (max-width: 720px) { .numbers { grid-template-columns: 1fr 1fr; row-gap: 40px; } }
+
+/* tools list */
+.toolgroups { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+.toolgroup { background: var(--card); border-radius: 24px; padding: 28px 30px; box-shadow: var(--shadow); }
+.toolgroup h3 { font-size: 19px; margin-bottom: 14px; }
+.toolgroup dl { margin: 0; }
+.toolgroup dt { font-family: var(--mono); font-size: 14px; color: var(--accent); margin-top: 14px; }
+.toolgroup dt:first-child { margin-top: 0; }
+.toolgroup dd { margin: 3px 0 0; color: var(--muted); font-size: 15px; }
+@media (max-width: 820px) { .toolgroups { grid-template-columns: 1fr; } }
+
+/* safety */
+.safety { display: grid; grid-template-columns: repeat(3, 1fr); gap: 34px; }
+.safety h3 { font-size: 19px; }
+.safety p { color: var(--muted); margin: 0; font-size: 16px; }
+@media (max-width: 820px) { .safety { grid-template-columns: 1fr; } }
+
+/* install */
+.steps-list { counter-reset: s; list-style: none; padding: 0; margin: 0; }
+.steps-list > li { counter-increment: s; position: relative; padding: 0 0 34px 58px; }
+.steps-list > li::before { content: counter(s); position: absolute; left: 0; top: -2px; width: 36px; height: 36px; border-radius: 50%;
+  background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 600; font-size: 15px; }
+.steps-list h3 { font-size: 20px; margin-bottom: 6px; }
+.steps-list p { color: var(--muted); margin: 0 0 12px; }
+.code { position: relative; background: var(--code-bg); border-radius: 14px; padding: 14px 52px 14px 16px; overflow-x: auto; margin: 0; }
+.code pre { margin: 0; white-space: pre; font-size: 14px; line-height: 1.55; color: var(--ink); }
+.copy { position: absolute; top: 8px; right: 8px; border: 0; background: var(--card); color: var(--ink-2); border-radius: 8px; width: 34px; height: 30px;
+  cursor: pointer; display: grid; place-items: center; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.copy:hover { color: var(--accent); }
+.copy svg { width: 15px; height: 15px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.tabs button { border: 0; font: inherit; font-size: 14px; padding: 6px 13px; border-radius: 980px; cursor: pointer; background: var(--code-bg); color: var(--ink-2); }
+.tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+.panel[hidden] { display: none; }
+.panel p { font-size: 15px; }
+.prompt-box { background: var(--card); border-radius: 28px; box-shadow: var(--shadow); padding: 34px; margin-bottom: 60px; }
+.prompt-box .row { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 18px; }
+.prompt-box .row p { color: var(--muted); margin: 6px 0 0; }
+.prompt-box .code pre { white-space: pre-wrap; }
+
+/* faq */
+details { border-bottom: 1px solid var(--line); padding: 20px 0; }
+details summary { cursor: pointer; font-size: 19px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 20px; }
+details summary::-webkit-details-marker { display: none; }
+details summary::after { content: "+"; color: var(--accent); font-weight: 400; font-size: 26px; line-height: 1; transition: transform .3s; }
+details[open] summary::after { transform: rotate(45deg); }
+details p { color: var(--muted); margin: 12px 0 0; }
+
+/* contribute + footer */
+.contribute { text-align: center; }
+.contribute .actions { margin-top: 30px; }
+footer { padding: 34px 0 50px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
+footer a { color: var(--ink-2); }
+
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); background: var(--ink); color: var(--bg); padding: 11px 18px;
+  border-radius: 980px; font-size: 14px; opacity: 0; transition: opacity .3s, transform .3s; pointer-events: none; z-index: 100; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .wrap { padding: 0 16px; }
+  section { padding: 76px 0; }
+  .hero { padding-top: 56px; }
+  .tile { padding: 26px; border-radius: 24px; }
+  .prompt-box { padding: 22px; border-radius: 22px; }
+  .steps-list > li { padding-left: 48px; }
+  .btn { font-size: 16px; padding: 11px 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .js .reveal { opacity: 1; transform: none; transition: none; }
+  .rise { animation: none; }
+  .typing::after { animation: none; }
+  .story .stage img { transition: none; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<nav class="top" aria-label="Main">
+  <div class="wrap">
+    <a class="name" href="#top">Anycubic Slicer MCP</a>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#tools">Tools</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp">GitHub</a>
+    </div>
+    <button class="btn btn-primary cta" data-copy="prompt" type="button">Copy setup prompt</button>
+  </div>
+</nav>
+
+<main id="main">
+<header class="hero" id="top">
+  <div class="wrap">
+    <p class="eyebrow rise">MCP server for Anycubic Slicer Next</p>
+    <h1 class="rise d1"><span class="grad">Anycubic Slicer MCP</span></h1>
+    <p class="lede rise d2">Tell your AI agent what you want to print. It slices the model in Anycubic Slicer Next, shows you the toolpaths and tells you the time and filament. <strong>You still press print.</strong></p>
+    <div class="actions rise d3">
+      <button class="btn btn-primary" data-copy="prompt" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+        Copy prompt for your agent
+      </button>
+      <button class="btn btn-secondary" data-copy="claude" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m3 5 3 3-3 3M8 12h5"/></svg>
+        Copy Claude Code command
+      </button>
+    </div>
+    <p class="hero-note rise d3">Paste the prompt into Claude Code, Cursor, Codex or any coding agent and it installs and connects everything. <a href="#agent-prompt" class="link-arrow">See the prompt</a></p>
+    <div class="hero-art"><img id="heroGear" src="assets/gear-stack.svg" width="560" height="420" alt="One layer of a sliced gear drawn in blue: outer walls, inner walls and wavy gyroid infill, stacked on the layers below it"></div>
+    <div class="clients reveal" aria-label="Works with">
+      <span>Claude Code</span><span>Claude Desktop</span><span>Cursor</span><span>VS Code</span><span>Codex</span><span>Antigravity</span><span>Any MCP client</span>
+    </div>
+  </div>
+</header>
+
+<section class="alt" aria-labelledby="demo-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="kicker">A real run</p>
+      <h2 id="demo-h">Ask for a print in a sentence.</h2>
+      <p>The agent picks the right tools, runs the real slicer on your computer and comes back with numbers and pictures you can check.</p>
+    </div>
+    <div class="chat reveal" id="chat">
+      <div class="msg user"><div class="who">You</div><div class="body" id="chatAsk">Slice gear.stl for my Kobra X. 20% gyroid, three walls.</div></div>
+      <div class="msg agent"><div class="who">AI</div><div class="body">
+        <span class="call">slice_model(models=["gear.stl"], overrides={"sparse_infill_density": "20%", "sparse_infill_pattern": "gyroid", "wall_loops": 3})</span>
+        <div>Done. It's a short print. Here is layer 12 so you can see the walls and infill.</div>
+        <div class="result">
+          <img src="assets/preview-layer-12.png" width="900" height="900" loading="lazy" alt="Layer 12 of the sliced gear: orange outer walls, yellow inner walls and red gyroid infill">
+          <dl class="facts">
+            <dt>Print time</dt><dd>30m 48s</dd>
+            <dt>Filament</dt><dd>9.66 g PLA</dd>
+            <dt>Layers</dt><dd>45 × 0.2 mm</dd>
+            <dt>Infill</dt><dd>20% gyroid</dd>
+            <dt>Walls</dt><dd>3</dd>
+            <dt>Printer</dt><dd>Kobra X 0.4 nozzle</dd>
+          </dl>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="see-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="kicker">Previews</p>
+      <h2 id="see-h">See every layer before the nozzle heats up.</h2>
+    </div>
+    <div class="story">
+      <div class="steps">
+        <div data-img="0"><h3>The first layer</h3><p>Check the first layer's walls and fill before anything else. Most failed prints start here. <code>preview_gcode</code> draws any layer coloured by feature.</p></div>
+        <div data-img="1"><h3>Any layer, up close</h3><p>Pick layer 12 or layer 40. Outer walls, inner walls, infill, bridges and supports each get their own colour, so a thin wall or a missing bridge is easy to spot.</p></div>
+        <div data-img="2"><h3>The whole part at once</h3><p>Every layer stacked and shaded by height. Lighter means higher. It's the quickest way to confirm the part sits where you expect on the bed.</p></div>
+        <div data-img="3"><h3>From the side</h3><p>A front elevation of the print, so overhangs and supports show up at a glance.</p></div>
+        <div data-img="4"><h3>Watch it build</h3><p><code>animate_layers</code> saves a GIF of the print going up layer by layer. <code>print_card</code> makes a 1200×630 summary you can drop into a chat or an order.</p></div>
+      </div>
+      <div class="stage" aria-hidden="true">
+        <img src="assets/preview-layer-1.png" alt="" loading="lazy" class="on">
+        <img src="assets/preview-layer-12.png" alt="" loading="lazy">
+        <img src="assets/preview-all-layers.png" alt="" loading="lazy">
+        <img src="assets/preview-side.png" alt="" loading="lazy">
+        <img src="assets/layers.gif" alt="" loading="lazy">
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="features" aria-labelledby="feat-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="kicker">Beyond slicing</p>
+      <h2 id="feat-h">The jobs that used to eat your evening.</h2>
+      <p>Profiles, failed prints, weak parts and wasted filament. Hand them to the agent and it does the fiddly part with the slicer you already use.</p>
+    </div>
+    <div class="bento">
+      <article class="tile split wide reveal">
+        <div>
+          <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/></svg></div>
+          <h3>Snap the spool label. Get a filament profile.</h3>
+          <p>Send a photo of the label. The agent reads the brand, material, colour and temperature ranges, and <code>create_filament_profile</code> builds a preset from them, starting from the closest one your printer already has. You see a preview first and nothing is saved until you say so. Anything the label doesn't say gets a typical value for that material, and the agent tells you which ones.</p>
+          <div class="tools"><code>create_filament_profile</code><code>add_spool</code><code>list_spools</code><code>update_spool</code></div>
+        </div>
+        <div>
+          <div class="code"><pre>name      Example PETG Galaxy Black
+inherits  Anycubic PETG @Kobra X 0.4
+nozzle    240 °C, first layer 245 °C
+bed       75 °C
+colour    #1B1B1F
+density   1.27 g/cm³
+saved     not yet (preview)</pre></div>
+          <p style="font-size:14px;margin-top:10px">The preview for a PETG label that reads 230 to 250 °C nozzle and 70 to 80 °C bed. Spools also go into a small inventory on your computer, so later the agent can tell you which one has enough left for a print.</p>
+        </div>
+      </article>
+
+      <article class="tile reveal">
+        <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v3M12 18v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M4.2 16.5 6.8 15M17.2 9l2.6-1.5"/><circle cx="12" cy="12" r="4"/></svg></div>
+        <h3>Show it the failed print.</h3>
+        <p>Stringing, warping, split layers, a messy first layer. The agent looks at your photos and matches them to one of 13 known defects. <code>diagnose_print</code> then suggests setting changes based on the presets you actually used. When two fixes pull in opposite directions, it says so and leaves that setting alone.</p>
+        <div class="tools"><code>diagnose_print</code></div>
+      </article>
+
+      <article class="tile blue reveal d1">
+        <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 20h16M7 20V9l5-5 5 5v11"/><path d="M10 20v-5h4v5"/></svg></div>
+        <h3>Make it stronger on purpose.</h3>
+        <p>Say how the part gets loaded: pulled, pushed, bent, hit or twisted, and in which direction. <code>analyze_strength</code> finds thin waists in the shape, then suggests an orientation plus walls, infill and layer height. <code>find_best_orientation</code> ranks ways to lay it on the bed for less support, speed, strength or adhesion.</p>
+        <div class="tools"><code>analyze_strength</code><code>find_best_orientation</code></div>
+      </article>
+
+      <article class="tile split wide reveal">
+        <div>
+          <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="8" cy="12" r="4.5"/><circle cx="16" cy="12" r="4.5"/></svg></div>
+          <h3>Less purge, more print.</h3>
+          <p>Every colour change on a single-nozzle printer flushes filament. In a two-colour test on a Kobra X, 12.37 g of a 25.07 g print went to colour changes. <code>optimize_multicolor</code> measures that waste for your model, tries settings that might reduce it and recommends one only if every colour survives and it really saves filament. It also suggests layout changes, like fewer colour switches per layer.</p>
+          <div class="tools"><code>optimize_multicolor</code></div>
+        </div>
+        <div>
+          <div class="waste-bar" id="wasteBar" role="img" aria-label="12.37 g of 25.07 g went to colour changes, about 49 percent"><i class="model" data-w="50.7"></i><i class="purge" data-w="49.3"></i></div>
+          <div class="waste-legend"><span><b style="background:var(--accent)"></b>Model 12.70 g</span><span><b style="background:#ff9f0a"></b>Colour changes 12.37 g</span></div>
+        </div>
+      </article>
+
+      <article class="tile third reveal">
+        <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-11"/></svg></div>
+        <h3>Compare before you commit.</h3>
+        <p>Slice up to eight variants side by side and see the time, grams and cost of each choice.</p>
+        <div class="tools"><code>compare_slices</code></div>
+      </article>
+
+      <article class="tile third reveal d1">
+        <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3S9.5 10.4 12 11s4.5 1.6 4.5 3.7-2 3.3-4.5 3.3-4.5-1.3-4.5-3"/></svg></div>
+        <h3>Price the job.</h3>
+        <p>Filament plus electricity, plus labour or markup if you sell prints.</p>
+        <div class="tools"><code>estimate_cost</code></div>
+      </article>
+
+      <article class="tile third reveal d2">
+        <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 16 16 8M11 8h5v5"/></svg></div>
+        <h3>Will it fit?</h3>
+        <p>If it doesn't, you get options: turn it 45°, scale it, lay it down or split it.</p>
+        <div class="tools"><code>check_bed_fit</code><code>model_info</code></div>
+      </article>
+
+      <article class="tile wide reveal">
+        <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 14h9"/></svg></div>
+        <h3>Calibration prints, ready to go.</h3>
+        <p>A temperature tower that changes the nozzle temperature at every block for you. Flow cubes around your filament's flow ratio. Retraction towers. Five first-layer squares spread across the bed to check levelling. Each one comes back sliced, with notes on how to read the result.</p>
+        <div class="tools"><code>make_calibration_print</code></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section aria-label="By the numbers">
+  <div class="wrap numbers">
+    <div class="reveal"><div class="n accent" data-count="23">23</div><p>tools</p></div>
+    <div class="reveal d1"><div class="n" data-count="5">5</div><p>guided prompts</p></div>
+    <div class="reveal d2"><div class="n" data-count="13">13</div><p>print defects it can diagnose</p></div>
+    <div class="reveal d3"><div class="n" data-count="2">2</div><p>platforms: Windows and macOS</p></div>
+  </div>
+</section>
+
+<section class="alt" id="tools" aria-labelledby="tools-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="kicker">Reference</p>
+      <h2 id="tools-h">All 23 tools.</h2>
+      <p>Your agent sees these with full descriptions. You never need to call them yourself, but it helps to know what's there.</p>
+    </div>
+    <div class="toolgroups">
+      <div class="toolgroup reveal"><h3>Slice</h3><dl>
+        <dt>slicer_status</dt><dd>Finds Anycubic Slicer Next and reports the printer, process and filament selected in the app.</dd>
+        <dt>list_presets</dt><dd>Lists printer, process and filament presets, filtered to the ones made for your printer.</dd>
+        <dt>get_preset</dt><dd>Shows a preset's settings with inheritance resolved, or searches for a setting name.</dd>
+        <dt>save_user_preset</dt><dd>Saves your own preset that shows up in the slicer app.</dd>
+        <dt>model_info</dt><dd>Size, volume, triangle count, watertight check and build-volume fit for STL, OBJ, 3MF or STEP.</dd>
+        <dt>slice_model</dt><dd>Slices to G-code and a .gcode.3mf with any setting overrides, rotation, scale, copies and multi-colour.</dd>
+        <dt>open_in_slicer</dt><dd>Opens a model or G-code in the slicer window, when you ask for it.</dd>
+      </dl></div>
+      <div class="toolgroup reveal d1"><h3>Look</h3><dl>
+        <dt>gcode_summary</dt><dd>Time, filament, cost, layers, first-layer time, colour changes and key settings from any G-code file.</dd>
+        <dt>preview_gcode</dt><dd>Top view of one layer or all of them, or a side view of the whole print.</dd>
+        <dt>animate_layers</dt><dd>A GIF of the print building up.</dd>
+        <dt>print_card</dt><dd>A shareable summary image with the preview and the numbers.</dd>
+      </dl></div>
+      <div class="toolgroup reveal"><h3>Plan</h3><dl>
+        <dt>compare_slices</dt><dd>Up to eight variants of the same model, compared on time, filament and cost.</dd>
+        <dt>find_best_orientation</dt><dd>Ranks orientations for balance, least support, speed, strength or bed adhesion.</dd>
+        <dt>analyze_strength</dt><dd>Orientation and settings for how the part is loaded.</dd>
+        <dt>check_bed_fit</dt><dd>Fits the model to the bed or suggests how to make it fit.</dd>
+        <dt>estimate_cost</dt><dd>Filament, electricity and extras such as labour.</dd>
+      </dl></div>
+      <div class="toolgroup reveal d1"><h3>Filament</h3><dl>
+        <dt>create_filament_profile</dt><dd>A filament preset from what's printed on the spool label.</dd>
+        <dt>add_spool</dt><dd>Adds a spool to the inventory kept on your computer.</dd>
+        <dt>list_spools</dt><dd>Shows what's left and which spools have enough for a print.</dd>
+        <dt>update_spool</dt><dd>Records a weigh-in or a finished print, or removes a spool.</dd>
+      </dl></div>
+      <div class="toolgroup reveal"><h3>Fix and tune</h3><dl>
+        <dt>diagnose_print</dt><dd>Causes, checks and setting changes for defects you saw in the print.</dd>
+        <dt>make_calibration_print</dt><dd>Temperature tower, flow cubes, retraction towers or first-layer squares, sliced.</dd>
+        <dt>optimize_multicolor</dt><dd>Measures colour-change waste and tests ways to cut it.</dd>
+      </dl></div>
+      <div class="toolgroup reveal d1"><h3>Guided prompts</h3><dl>
+        <dt>setup_check</dt><dd>Confirms the install works with a test slice.</dd>
+        <dt>filament_from_label</dt><dd>Label photo to saved profile, with your OK.</dd>
+        <dt>diagnose_from_photos</dt><dd>Failed-print photos to a fix.</dd>
+        <dt>make_it_stronger</dt><dd>Asks how the part is loaded, then compares the cost of stronger settings.</dd>
+        <dt>multicolor_waste</dt><dd>Walks through cutting purge waste.</dd>
+      </dl></div>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="safe-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="kicker">Local and careful</p>
+      <h2 id="safe-h">Your printer stays yours.</h2>
+    </div>
+    <div class="safety">
+      <div class="reveal"><h3>It never prints.</h3><p>The server writes G-code and .gcode.3mf files on your computer. Sending them to the printer is always your call.</p></div>
+      <div class="reveal d1"><h3>Runs on your machine.</h3><p>It drives the slicer's own command line. Models, presets and spool records stay on your computer.</p></div>
+      <div class="reveal d2"><h3>Refuses risky files.</h3><p>Project files that carry post-processing scripts are rejected, since those scripts can run programs. Custom G-code templates are off limits unless you turn them on.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="install" aria-labelledby="install-h">
+  <div class="wrap narrow">
+    <div class="section-head reveal">
+      <p class="kicker">Install</p>
+      <h2 id="install-h">Two ways to set it up.</h2>
+      <p>Hand a prompt to your agent, or follow four steps yourself.</p>
+    </div>
+
+    <div class="prompt-box reveal" id="agent-prompt">
+      <div class="row">
+        <div><h3 style="margin:0">Prompt for your agent</h3><p>Paste this into Claude Code, Cursor, Codex, Antigravity or another coding agent.</p></div>
+        <button class="btn btn-primary" data-copy="prompt" type="button">Copy prompt</button>
+      </div>
+      <div class="code"><pre id="promptText"></pre></div>
+    </div>
+
+    <ol class="steps-list">
+      <li class="reveal"><h3>Install Anycubic Slicer Next</h3><p>Get it from Anycubic, then open it once and pick your printer so it sets up its presets.</p></li>
+      <li class="reveal"><h3>Install uv</h3><p>uv installs Python tools in their own environment. Use the command for your system from the <a href="https://docs.astral.sh/uv/getting-started/installation/">uv install page</a>.</p></li>
+      <li class="reveal"><h3>Install the server</h3>
+        <div class="code"><pre>uv tool install --python 3.13 git+https://github.com/pri-te-sh/anycubic-slicer-mcp</pre></div>
+        <p style="margin-top:12px">This puts an <code>anycubic-slicer-mcp</code> command on your PATH. <code>uv tool dir --bin</code> prints where it lives.</p></li>
+      <li class="reveal"><h3>Add it to your AI app</h3>
+        <div class="tabs" role="tablist" aria-label="AI app">
+          <button role="tab" aria-selected="true" aria-controls="p-cc" id="t-cc" type="button">Claude Code</button>
+          <button role="tab" aria-selected="false" aria-controls="p-cd" id="t-cd" type="button">Claude Desktop</button>
+          <button role="tab" aria-selected="false" aria-controls="p-cu" id="t-cu" type="button">Cursor</button>
+          <button role="tab" aria-selected="false" aria-controls="p-vs" id="t-vs" type="button">VS Code</button>
+          <button role="tab" aria-selected="false" aria-controls="p-cx" id="t-cx" type="button">Codex</button>
+          <button role="tab" aria-selected="false" aria-controls="p-ot" id="t-ot" type="button">Other</button>
+        </div>
+        <div class="panel" role="tabpanel" id="p-cc" aria-labelledby="t-cc"><div class="code"><pre>claude mcp add anycubic-slicer --scope user -- anycubic-slicer-mcp</pre></div></div>
+        <div class="panel" role="tabpanel" id="p-cd" aria-labelledby="t-cd" hidden><p>Settings › Developer › Edit Config, then add this to <code>claude_desktop_config.json</code>. Desktop apps often don't see your shell's PATH, so use the full path that <code>uv tool dir --bin</code> prints.</p>
+          <div class="code"><pre>{
+  "mcpServers": {
+    "anycubic-slicer": {
+      "command": "/Users/you/.local/bin/anycubic-slicer-mcp"
+    }
+  }
+}</pre></div></div>
+        <div class="panel" role="tabpanel" id="p-cu" aria-labelledby="t-cu" hidden><p>Add to <code>~/.cursor/mcp.json</code>:</p>
+          <div class="code"><pre>{
+  "mcpServers": {
+    "anycubic-slicer": { "command": "anycubic-slicer-mcp" }
+  }
+}</pre></div></div>
+        <div class="panel" role="tabpanel" id="p-vs" aria-labelledby="t-vs" hidden><p>Add to <code>.vscode/mcp.json</code> in your workspace:</p>
+          <div class="code"><pre>{
+  "servers": {
+    "anycubic-slicer": { "type": "stdio", "command": "anycubic-slicer-mcp" }
+  }
+}</pre></div></div>
+        <div class="panel" role="tabpanel" id="p-cx" aria-labelledby="t-cx" hidden><div class="code"><pre>codex mcp add anycubic-slicer -- anycubic-slicer-mcp</pre></div></div>
+        <div class="panel" role="tabpanel" id="p-ot" aria-labelledby="t-ot" hidden><p>Any MCP client works. Add a stdio server named <code>anycubic-slicer</code> whose command is <code>anycubic-slicer-mcp</code> (or its full path). In Antigravity, open the MCP servers panel, choose to edit the raw config and add the same <code>mcpServers</code> entry shown for Cursor.</p></div>
+        <p style="margin-top:14px">Then ask your agent to run <code>slicer_status</code>. It should name the printer you picked in the slicer.</p></li>
+    </ol>
+  </div>
+</section>
+
+<section id="faq" aria-labelledby="faq-h">
+  <div class="wrap narrow">
+    <div class="section-head reveal"><h2 id="faq-h">Questions.</h2></div>
+    <div class="reveal">
+      <details><summary>Does it send anything to my printer?</summary><p>No. It slices on your computer and writes G-code and .gcode.3mf files. You send them to the printer yourself.</p></details>
+      <details><summary>Which printers does it support?</summary><p>Any printer that has a preset in Anycubic Slicer Next, because the server reads the slicer's own presets. It has been tested end to end on a Kobra X with a 0.4 mm nozzle. If you run it on another model, a <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp/issues/new?template=printer_report.yml">printer report</a> helps a lot.</p></details>
+      <details><summary>Which AI apps can use it?</summary><p>Anything that speaks the Model Context Protocol over stdio: Claude Code, Claude Desktop, Cursor, VS Code, Codex, Antigravity and others.</p></details>
+      <details><summary>Do I need to keep the slicer window open?</summary><p>No. The server runs the slicer from the command line in the background. It reads the printer, process and filament you last picked in the app, so open it once to choose them.</p></details>
+      <details><summary>Does it work on Linux?</summary><p>Not yet. It supports Windows and macOS. Pull requests for Linux are welcome.</p></details>
+      <details><summary>My slicer is installed somewhere unusual.</summary><p>Set <code>ANYCUBIC_SLICER_EXE</code> to the slicer program and, if needed, <code>ANYCUBIC_SLICER_DATA</code> to its data folder, in your MCP client's config for this server.</p></details>
+      <details><summary>Is this made by Anycubic?</summary><p>No. It's an independent open-source project under the MIT licence and isn't affiliated with or endorsed by Anycubic.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="alt contribute" aria-labelledby="contrib-h">
+  <div class="wrap narrow">
+    <p class="kicker reveal">Open source</p>
+    <h2 class="reveal" id="contrib-h">Got a different printer? Help it print better.</h2>
+    <p class="lede reveal" style="font-size:21px">The quickest useful contribution is a printer report: run the tests, slice the example gear and tell us what happened. Code, new print defects and calibration ideas are welcome too.</p>
+    <div class="actions reveal">
+      <a class="btn btn-primary" href="https://github.com/pri-te-sh/anycubic-slicer-mcp/issues/new?template=printer_report.yml">Send a printer report</a>
+      <a class="btn btn-secondary" href="https://github.com/pri-te-sh/anycubic-slicer-mcp/blob/main/CONTRIBUTING.md">Read the contributing guide</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Anycubic Slicer MCP. MIT licence. Not affiliated with Anycubic. Anycubic and Kobra are trademarks of their owner.</span>
+    <span><a href="https://github.com/pri-te-sh/anycubic-slicer-mcp">GitHub</a> · <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp/issues">Issues</a> · <a href="https://github.com/pri-te-sh">pri-te-sh</a></span>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const REPO = "https://github.com/pri-te-sh/anycubic-slicer-mcp";
+  const PROMPT = `Set up the Anycubic Slicer MCP server (${REPO}) on this computer and connect it to the AI app you are running in.
+
+1. Check that Anycubic Slicer Next is installed. On macOS look for /Applications/AnycubicSlicerNext.app; on Windows look for C:\\Program Files\\AnycubicSlicerNext\\AnycubicSlicerNext.exe. If it is missing, stop and ask me to install it from Anycubic's website and open it once.
+2. Check that uv is installed (run: uv --version). If it is not, show me the official install command from https://docs.astral.sh/uv/getting-started/installation/ and wait for me to run it.
+3. Install the server:
+   uv tool install --python 3.13 git+${REPO}
+4. Find the full path of the anycubic-slicer-mcp command (run: uv tool dir --bin).
+5. Register it as a stdio MCP server named "anycubic-slicer" in the app you are running in. It needs no arguments or environment variables.
+   - Claude Code: claude mcp add anycubic-slicer --scope user -- anycubic-slicer-mcp
+   - Codex: codex mcp add anycubic-slicer -- anycubic-slicer-mcp
+   - Cursor, Claude Desktop, Antigravity and others: add {"mcpServers": {"anycubic-slicer": {"command": "<full path from step 4>"}}} to the app's MCP config, keeping any servers already there.
+6. Tell me if the app needs a restart to load the server. Once it's loaded, call the slicer_status tool and tell me which printer, process and filament it found.
+
+Don't change anything else on my system, and ask before running any command that needs administrator rights.`;
+  const CLAUDE = `uv tool install --python 3.13 git+${REPO} && claude mcp add anycubic-slicer --scope user -- anycubic-slicer-mcp`;
+  document.getElementById("promptText").textContent = PROMPT;
+
+  const toast = document.getElementById("toast");
+  let toastTimer;
+  function say(text) {
+    toast.textContent = text; toast.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+  }
+  async function copy(text) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch (e) {
+      const t = document.createElement("textarea"); t.value = text; t.style.position = "fixed"; t.style.opacity = "0";
+      document.body.appendChild(t); t.select();
+      let ok = false; try { ok = document.execCommand("copy"); } catch (_) {}
+      t.remove(); return ok;
+    }
+  }
+  document.querySelectorAll("[data-copy]").forEach(btn => btn.addEventListener("click", async () => {
+    const which = btn.dataset.copy;
+    const ok = await copy(which === "prompt" ? PROMPT : CLAUDE);
+    say(ok ? (which === "prompt" ? "Prompt copied. Paste it into your agent." : "Command copied. Paste it into your terminal.") : "Couldn't copy. Select the text below instead.");
+  }));
+
+  // copy buttons on code blocks
+  const icon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>';
+  document.querySelectorAll(".code").forEach(box => {
+    if (box.closest(".prompt-box") || box.closest(".tile")) return;
+    const b = document.createElement("button"); b.className = "copy"; b.type = "button"; b.innerHTML = icon; b.setAttribute("aria-label", "Copy");
+    b.addEventListener("click", async () => say((await copy(box.querySelector("pre").textContent)) ? "Copied." : "Couldn't copy."));
+    box.appendChild(b);
+  });
+
+  // tabs
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  tabs.forEach(tab => tab.addEventListener("click", () => {
+    tabs.forEach(t => { t.setAttribute("aria-selected", t === tab); document.getElementById(t.getAttribute("aria-controls")).hidden = t !== tab; });
+  }));
+
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // reveal on scroll
+  const io = new IntersectionObserver(entries => entries.forEach(e => {
+    if (!e.isIntersecting) return;
+    e.target.classList.add("in"); io.unobserve(e.target);
+    if (e.target.querySelector && e.target.querySelector("#wasteBar")) fillWaste();
+    const n = e.target.querySelector && e.target.querySelector("[data-count]");
+    if (n && !still) countUp(n);
+  }), { threshold: 0.15, rootMargin: "0px 0px -40px 0px" });
+  document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+  function fillWaste() { document.querySelectorAll("#wasteBar i").forEach(i => i.style.width = i.dataset.w + "%"); }
+  function countUp(el) {
+    const end = +el.dataset.count, t0 = performance.now(), dur = 900;
+    (function tick(t) { const p = Math.min(1, (t - t0) / dur); el.textContent = Math.round(end * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(tick); })(t0);
+  }
+
+  // typing effect on the chat request
+  const ask = document.getElementById("chatAsk");
+  if (!still) {
+    const full = ask.textContent; ask.textContent = ""; ask.classList.add("typing");
+    const chatIO = new IntersectionObserver(es => { if (es[0].isIntersecting) { chatIO.disconnect();
+      let i = 0; const t = setInterval(() => { ask.textContent = full.slice(0, ++i); if (i >= full.length) { clearInterval(t); setTimeout(() => ask.classList.remove("typing"), 900); } }, 28); } }, { threshold: .5 });
+    chatIO.observe(document.getElementById("chat"));
+  }
+
+  // scroll story: swap the image as each step comes into view
+  const imgs = [...document.querySelectorAll(".story .stage img")];
+  const steps = [...document.querySelectorAll(".story .steps > div")];
+  const storyIO = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    steps.forEach(s => s.classList.toggle("on", s === e.target));
+    imgs.forEach((im, k) => im.classList.toggle("on", k === +e.target.dataset.img));
+  }), { rootMargin: "-45% 0px -45% 0px" });
+  steps.forEach(s => storyIO.observe(s));
+  steps[0].classList.add("on");
+
+  // hero gear tilts and settles as you scroll
+  const gear = document.getElementById("heroGear");
+  if (!still && gear) {
+    let ticking = false;
+    const update = () => {
+      const p = Math.min(1, Math.max(0, scrollY / (innerHeight * 0.9)));
+      gear.style.transform = `rotateX(${(1 - p) * 18}deg) translateY(${p * -30}px) scale(${0.94 + p * 0.1})`;
+      ticking = false;
+    };
+    update();
+    addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
+  }
+})();
+</script>
+</body>
+</html>

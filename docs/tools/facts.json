@@ -1,0 +1,31 @@
+{
+  "printer": "Anycubic Kobra X 0.4 nozzle",
+  "filament": "Anycubic PLA @Anycubic Kobra X 0.4 nozzle",
+  "time": "30m 48s",
+  "grams": 9.66,
+  "layers": 45,
+  "layer_height": "0.2",
+  "infill": "20%",
+  "pattern": "gyroid",
+  "walls": "3",
+  "max_z": 9.0,
+  "best_orientation": {
+    "orientation": "as modelled",
+    "rotation": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "height_mm": 9.0,
+    "footprint_mm": [
+      60.0,
+      60.0
+    ],
+    "support_area_mm2": 0.0,
+    "bed_contact_mm2": 2019.5,
+    "weakest_layer_ratio": 1.0,
+    "load_along_layers": null,
+    "fits_bed": true,
+    "score": 91.7
+  }
+}

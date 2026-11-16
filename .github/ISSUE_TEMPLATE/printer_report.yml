@@ -1,0 +1,41 @@
+name: Printer report
+description: Tell us how the server works with your printer, OS and slicer version
+title: "[printer] <printer model> on <OS>"
+labels: ["printer report"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks. Reports like this are how we learn which printers work, so a report that says "it all worked" is just as useful as one about a problem.
+  - type: input
+    id: printer
+    attributes: { label: Printer and nozzle, placeholder: "Kobra X, 0.4 mm" }
+    validations: { required: true }
+  - type: dropdown
+    id: os
+    attributes: { label: Operating system, options: ["macOS (Apple silicon)", "macOS (Intel)", "Windows 11", "Windows 10", "Other"] }
+    validations: { required: true }
+  - type: input
+    id: slicer
+    attributes: { label: Anycubic Slicer Next version, placeholder: "2.0.0.3 (slicer_status shows it)" }
+    validations: { required: true }
+  - type: input
+    id: client
+    attributes: { label: MCP client, placeholder: "Claude Code, Cursor, Codex, Antigravity" }
+  - type: dropdown
+    id: result
+    attributes: { label: "Did slicing work?", options: ["Yes, everything worked", "Partly (see notes)", "No"] }
+    validations: { required: true }
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: "What did you try?"
+      options:
+        - label: slice_model and preview_gcode
+        - label: create_filament_profile
+        - label: diagnose_print
+        - label: make_calibration_print
+        - label: optimize_multicolor
+        - label: find_best_orientation or analyze_strength
+  - type: textarea
+    id: notes
+    attributes: { label: Notes, description: "What you sliced, anything odd, warnings or errors. Paste tool output if you have it." }

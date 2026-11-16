@@ -1,0 +1,21 @@
+name: Bug report
+description: Something doesn't work the way it should
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: "What happened?", description: "What you asked the agent or which tool you called, and what came back. Paste the error if there was one." }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: "What did you expect?" }
+  - type: input
+    id: env
+    attributes: { label: "Printer, OS and slicer version", placeholder: "Kobra X 0.4, macOS 27, Anycubic Slicer Next 2.0.0.3" }
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes: { label: Server version or commit, placeholder: "1.0.0 (slicer_status shows it)" }
+  - type: textarea
+    id: files
+    attributes: { label: Files, description: "Attach the model or G-code if you can share it. Small files help a lot." }

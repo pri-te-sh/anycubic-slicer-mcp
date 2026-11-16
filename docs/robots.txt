@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pri-te-sh.github.io/anycubic-slicer-mcp/sitemap.xml

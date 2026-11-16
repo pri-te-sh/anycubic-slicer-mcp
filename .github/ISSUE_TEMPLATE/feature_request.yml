@@ -1,0 +1,14 @@
+name: Feature idea
+description: Suggest a tool, a print defect for the doctor, a calibration print or anything else
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: "What are you trying to do?", description: "Describe the job, not the solution. For example: I keep losing time re-slicing the same part with different infill." }
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes: { label: "How could the server help?", description: "A new tool, a change to an existing one, a new prompt." }
+  - type: dropdown
+    id: help
+    attributes: { label: "Would you like to build it?", options: ["Yes", "Yes, with some help", "No, just suggesting"] }
