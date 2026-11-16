@@ -4,6 +4,7 @@ from __future__ import annotations
 import functools
 import json
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,7 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from . import __version__
-from . import analysis, calibration, doctor, gcode as gc, materials, optimize, project, render
+from . import analysis, calibration, doctor, gcode as gc, materials, optimize, printer as lan, project, render
 from .install import find_install, state_dir
 from .inventory import Inventory
 from .mesh import describe, load_mesh, rotation
@@ -38,7 +39,13 @@ Anycubic Slicer Next, headless. Typical flows:
   again with plan_id and the answers → show the plates and get the user's OK → slice_project. Never answer a
   question for the user or slice while one is open. If you have your own doubts (which spool, which parts matter
   most), ask those too.
-Never claim a print is safe without the user checking the preview. This server never sends anything to a printer.
+- Live printer (opt-in, LAN mode only): find_printers → printer_status (state, job, temperatures, errors with their
+  meaning, loaded filament and ACE slots) → printer_camera_snapshot to look at the print. Use them to triage a failed or
+  paused print together with diagnose_print. control_print pauses, resumes or stops a print: call it without confirm
+  first, tell the user exactly what will happen, and only call it with confirm=True after they say yes in this
+  conversation. Never stop a print on your own judgement.
+Never claim a print is safe without the user checking the preview. Nothing is ever sent to a printer except the
+pause, resume and stop commands of control_print, and the camera start/stop of printer_camera_snapshot.
 """
 
 mcp = FastMCP("anycubic-slicer", instructions=INSTRUCTIONS)
@@ -48,10 +55,11 @@ SLICER = Slicer(INSTALL, LIB)
 INVENTORY = Inventory()
 
 
-def _ann(title: str, read_only: bool = False, destructive: bool = False, idempotent: bool = True) -> ToolAnnotations:
-    """MCP behaviour hints. Nothing here reaches outside this computer, so openWorldHint is always false."""
+def _ann(title: str, read_only: bool = False, destructive: bool = False, idempotent: bool = True,
+         open_world: bool = False) -> ToolAnnotations:
+    """MCP behaviour hints. Only the printer tools reach beyond this computer (to a printer on the local network)."""
     return ToolAnnotations(title=title, readOnlyHint=read_only, destructiveHint=False if read_only else destructive,
-                           idempotentHint=True if read_only else idempotent, openWorldHint=False)
+                           idempotentHint=True if read_only else idempotent, openWorldHint=open_world)
 
 
 # Parameter types shared by several tools; the descriptions end up in each tool's input schema.
@@ -61,6 +69,7 @@ Filaments = Annotated[list[str] | None, Field(description="Filament preset names
 ModelPath = Annotated[str, Field(description="Path to an STL, OBJ, 3MF or STEP file on this computer.")]
 GcodePath = Annotated[str, Field(description="Path to a .gcode file on this computer, e.g. one written by slice_model.")]
 OutputDir = Annotated[str | None, Field(description="Folder for the output files. Default: next to the first model.")]
+PrinterHost = Annotated[str | None, Field(description="The printer's IP address on your network (shown on the printer under Settings > Network), e.g. '192.168.1.84'. Omit to use the last printer that worked, or ANYCUBIC_PRINTER_HOST.")]
 
 
 def threaded(fn):
@@ -812,6 +821,101 @@ def slice_project(
     return out
 
 
+# ======================================================================== live printer (LAN mode)
+def _lan(fn):
+    """Turn printer errors into plain messages for the agent."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except lan.PrinterError as e:
+            raise ValueError(str(e)) from None
+    return wrapper
+
+
+@mcp.tool(title="Find printers", annotations=_ann("Find printers", read_only=True, open_world=True))
+@threaded
+@_lan
+def find_printers(
+    subnet: Annotated[str | None, Field(description="Private IPv4 range to search, e.g. '192.168.1.0/24' (at most 1024 addresses). Default: this computer's own /24 network.")] = None,
+    host: PrinterHost = None,
+) -> dict:
+    """Look for Anycubic printers on the local network and report whether their LAN mode is on.
+
+    Use it before the other printer tools when no printer address is known. Probes port 18910 on every address in
+    the range (a few seconds) and reads each printer's public info: address, model, name and LAN-mode state. With
+    host, checks just that address. Read-only: it logs in to nothing and changes nothing. If LAN mode is off, tell
+    the user to switch it on at Settings > Network > LAN Mode (not possible while a print is running)."""
+    if host:
+        h = lan.check_host(host)
+        return {"printers": [lan.describe_info(h, lan.fetch_info(h))]}
+    return lan.find(subnet)
+
+
+@mcp.tool(title="Printer status", annotations=_ann("Printer status", read_only=True, open_world=True))
+@threaded
+@_lan
+def printer_status(
+    host: PrinterHost = None,
+    wait_seconds: Annotated[float, Field(description="How long to collect the printer's reports, 3 to 30 seconds.")] = 8,
+) -> dict:
+    """Read a printer's live state over its LAN mode: what it's doing, the current job, temperatures, errors and
+    loaded filament.
+
+    Use it to triage a print that paused, failed or looks wrong, before diagnose_print, or to check progress.
+    Returns state (printing, paused, idle...), job (file, progress, layer, minutes left), nozzle/bed temperatures and
+    targets, fans, lights, filament in the external spool and each ACE or built-in unit slot (material, colour,
+    remaining), and errors with Anycubic's meaning and a wiki link. Read-only: it only sends status queries. Needs
+    LAN mode on the printer; remembers the printer's address (no passwords) for next time."""
+    _bounded("wait_seconds", wait_seconds, 3, 30)
+    h = lan.resolve_host(host)
+    out = lan.status(h, wait_seconds)
+    lan.remember_host(h)
+    return out
+
+
+@mcp.tool(title="Printer camera snapshot", annotations=_ann("Printer camera snapshot", open_world=True))
+@threaded
+@_lan
+def printer_camera_snapshot(
+    host: PrinterHost = None,
+    output_dir: Annotated[str | None, Field(description="Folder for the JPEG. Default: Documents/Anycubic Slicer MCP/printer.")] = None,
+) -> list:
+    """Take one photo with the printer's built-in camera and return it, so you can look at the print.
+
+    Use it with printer_status when triaging: look for spaghetti, lifted corners, blobs, a detached part or an empty
+    bed. Starts the camera stream, grabs one frame with ffmpeg (needs ffmpeg installed), stops the stream and turns
+    the camera light back off if it was off. Takes up to about 20 seconds; writes printer-<time>.jpg to output_dir.
+    Doesn't affect the print. Needs LAN mode, and the slicer's camera view closed (the printer serves one viewer)."""
+    h = lan.resolve_host(host)
+    folder = Path(output_dir).expanduser() if output_dir else _default_out() / "printer"
+    folder.mkdir(parents=True, exist_ok=True)
+    out = folder / time.strftime("printer-%Y%m%d-%H%M%S.jpg")
+    meta = lan.snapshot(h, out)
+    lan.remember_host(h)
+    return [Image(data=out.read_bytes(), format="jpeg"), json.dumps(meta)]
+
+
+@mcp.tool(title="Pause, resume or stop a print",
+          annotations=_ann("Pause, resume or stop a print", destructive=True, idempotent=False, open_world=True))
+@threaded
+@_lan
+def control_print(
+    action: Annotated[str, Field(description="'pause', 'resume' or 'stop'. Stop ends the print for good.")],
+    confirm: Annotated[bool, Field(description="False (default) only previews what would happen. Set True only after the user has said yes in this conversation.")] = False,
+    host: PrinterHost = None,
+) -> dict:
+    """Pause, resume or stop the print running on the printer, after the user confirms.
+
+    Call it first without confirm: it checks the printer's state and returns what would happen (or why it can't, e.g.
+    nothing is printing). Tell the user, wait for an explicit yes, then call again with confirm=True. It sends the
+    command over LAN mode and waits up to 20 seconds for the printer to report the new state. Stop can't be undone;
+    never stop or resume a print on your own initiative. Resume after a filament pause only once the user says the
+    filament is fixed."""
+    h = lan.resolve_host(host)
+    return lan.control(h, action.strip().lower(), bool(confirm))
+
+
 # ======================================================================== prompts
 @mcp.prompt()
 def setup_check() -> str:
@@ -865,6 +969,17 @@ def print_this_project(project_path: str = "") -> str:
             "loaded, whether some parts are optional). Tell me the assumptions you're making. Re-plan with my answers, "
             "show me the plates (parts, rough time and filament), and only call slice_project once I say go. Afterwards, "
             "give me the real time and filament per plate and the order to print them in.")
+
+
+@mcp.prompt()
+def check_my_printer(problem: str = "") -> str:
+    """Look at the printer live and work out what's wrong with a print."""
+    return (f"{problem + ' ' if problem else ''}Call printer_status (use find_printers first if you don't know the printer's "
+            "address). Tell me its state, the job's progress, temperatures against their targets, which filament is "
+            "loaded where, and explain any error codes in plain words. Then take a printer_camera_snapshot and describe "
+            "what you see on the bed. If something is wrong, match it to diagnose_print's issues and suggest fixes for "
+            "now and for the next slice. If the print should be paused, resumed or stopped, say why and ask me first; "
+            "use control_print only after I say yes.")
 
 
 def main() -> None:

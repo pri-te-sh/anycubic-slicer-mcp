@@ -15,6 +15,9 @@ dependencies = [
     "mcp>=1.20,<2",
     "numpy>=1.24",
     "pillow>=10.1",
+    "httpx>=0.27",
+    "paho-mqtt>=2.0",
+    "cryptography>=42",
 ]
 keywords = ["mcp", "model-context-protocol", "anycubic", "anycubic-slicer-next", "kobra", "3d-printing",
             "slicer", "gcode", "ai", "claude", "cursor", "antigravity"]

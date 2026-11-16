@@ -33,8 +33,9 @@ You can ask for things like:
 - "This bracket gets bent from the side. Make it stronger and tell me what that costs in time."
 - "How much filament does this two-colour print waste on colour changes?"
 - "Here's a zip of the whole robot kit. Plan the plates, ask me what's unclear, then slice it."
+- "My print just paused. What's wrong, and can it carry on?"
 
-The server drives the slicer's own command line on your computer. It never sends anything to a printer, so you still check the preview and press print yourself.
+The server drives the slicer's own command line on your computer. It never sends a print to your printer, so you still check the preview and press print yourself. If you switch on your printer's LAN mode, it can also read the printer's live state and camera, and pause, resume or stop a print after you say yes.
 
 ## What it does
 
@@ -82,6 +83,14 @@ It doesn't guess when the files are unclear. It returns questions for the agent 
 - broken meshes, colour groups, and whether supported parts get their own plates
 
 Each plate is sliced as its own `.gcode.3mf`. If the slicer can't fit everything on a plate, the extras move to the next one. In a test with an 11-file kit, three questions settled it and the result was one plate of 14 pieces: 2h 32m 23s and 71.62 g.
+
+### Watch the printer (LAN mode)
+
+With LAN mode on (printer screen: Settings > Network > LAN Mode), the agent can see what your printer sees. `printer_status` reports the state, the job's progress and time left, nozzle and bed temperatures against their targets, the filament in each slot of the built-in unit or ACE, and any error code with Anycubic's meaning and a link to the fix. `printer_camera_snapshot` takes a photo with the built-in camera so the agent can look at the bed. Together with the print doctor, that's enough to work out why a print paused and whether it can carry on.
+
+`control_print` can pause, resume or stop a print. It previews first and only acts after you confirm in the chat. It can't start prints, heat anything or move the head.
+
+It talks to the printer directly over your network, using the protocol the community has documented for the Kobra X, S1 and Kobra 3 family. No Anycubic account is involved. Turning LAN mode on disconnects the printer from Anycubic Cloud and the phone app, and the switch can't be changed while a print is running or paused.
 
 ### Calibration prints
 
@@ -214,12 +223,17 @@ uv tool uninstall anycubic-slicer-mcp
 | Fix and tune | `diagnose_print` | Causes and setting changes for print defects |
 | | `make_calibration_print` | Temperature tower, flow, retraction or first-layer test, sliced |
 | | `optimize_multicolor` | Measures and reduces colour-change waste |
+| Printer (LAN mode) | `find_printers` | Finds Anycubic printers on your network and whether LAN mode is on |
+| | `printer_status` | State, job, temperatures, errors explained, loaded filament and ACE slots |
+| | `printer_camera_snapshot` | One photo from the printer's camera (needs ffmpeg) |
+| | `control_print` | Pause, resume or stop the current print, after you confirm |
 
-It also ships six prompts that walk the agent through common jobs: `setup_check`, `filament_from_label`, `diagnose_from_photos`, `make_it_stronger`, `multicolor_waste` and `print_this_project`.
+It also ships seven prompts that walk the agent through common jobs: `setup_check`, `filament_from_label`, `diagnose_from_photos`, `make_it_stronger`, `multicolor_waste`, `print_this_project` and `check_my_printer`.
 
 ## Safety
 
-- It writes files and nothing else. It never connects to a printer or a cloud service.
+- It never sends a print job to a printer and never connects to a cloud service.
+- Printer tools only talk to a printer you point them at, on your own network (public addresses are refused). They read status, start and stop the camera stream, and send pause, resume or stop, each only after you confirm. The printer's address is remembered; its LAN credentials are kept in memory only.
 - 3MF project files that contain post-processing scripts are refused, because those scripts can run programs on your computer.
 - Settings that hold custom G-code templates can't be overridden unless you set `ANYCUBIC_MCP_ALLOW_GCODE_TEMPLATES=1`.
 - Network paths (UNC on Windows) are blocked unless you set `ANYCUBIC_MCP_ALLOW_NETWORK_PATHS=1`.
@@ -236,6 +250,8 @@ Nothing is needed for a standard install. These environment variables cover the 
 | `ANYCUBIC_MCP_STATE_DIR` | Where the spool inventory, project plans and unpacked zips are kept |
 | `ANYCUBIC_MCP_ALLOW_GCODE_TEMPLATES` | `1` allows overriding G-code template settings |
 | `ANYCUBIC_MCP_ALLOW_NETWORK_PATHS` | `1` allows UNC network paths on Windows |
+| `ANYCUBIC_PRINTER_HOST` | Your printer's IP address, so the printer tools don't need it each time |
+| `ANYCUBIC_MCP_FFMPEG` | Path to ffmpeg for camera snapshots, if it isn't on your PATH |
 
 ## FAQ
 
