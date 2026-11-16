@@ -983,7 +983,7 @@ saved     not yet (preview)</pre></div>
       <li class="reveal"><h3>Install Anycubic Slicer Next</h3><p>Get it from Anycubic, then open it once and pick your printer so it sets up its presets.</p></li>
       <li class="reveal"><h3>Install uv</h3><p>uv installs Python tools in their own environment. Use the command for your system from the <a href="https://docs.astral.sh/uv/getting-started/installation/">uv install page</a>.</p></li>
       <li class="reveal"><h3>Install the server</h3>
-        <div class="code"><pre>uv tool install --python 3.13 git+https://github.com/pri-te-sh/anycubic-slicer-mcp</pre></div>
+        <div class="code"><pre>uv tool install --python 3.13 anycubic-slicer-mcp</pre></div>
         <p style="margin-top:12px">This puts an <code>anycubic-slicer-mcp</code> command on your PATH. <code>uv tool dir --bin</code> prints where it lives.</p></li>
       <li class="reveal"><h3>Add it to your AI app</h3>
         <div class="tabs" role="tablist" aria-label="AI app">
@@ -1079,7 +1079,7 @@ saved     not yet (preview)</pre></div>
 1. Check that Anycubic Slicer Next is installed. On macOS look for /Applications/AnycubicSlicerNext.app; on Windows look for C:\\Program Files\\AnycubicSlicerNext\\AnycubicSlicerNext.exe. If it is missing, stop and ask me to install it from Anycubic's website and open it once.
 2. Check that uv is installed (run: uv --version). If it is not, show me the official install command from https://docs.astral.sh/uv/getting-started/installation/ and wait for me to run it.
 3. Install the server:
-   uv tool install --python 3.13 git+${REPO}
+   uv tool install --python 3.13 anycubic-slicer-mcp
 4. Find the full path of the anycubic-slicer-mcp command (run: uv tool dir --bin).
 5. Register it as a stdio MCP server named "anycubic-slicer" in the app you are running in. It needs no arguments or environment variables.
    - Claude Code: claude mcp add anycubic-slicer --scope user -- anycubic-slicer-mcp
@@ -1089,9 +1089,9 @@ saved     not yet (preview)</pre></div>
 6. Tell me if the app needs a restart to load the server. Once it's loaded, call the slicer_status tool and tell me which printer, process and filament it found.
 
 Don't change anything else on my system, and ask before running any command that needs administrator rights.`;
-  const INSTALL = `uv tool install --python 3.13 git+${REPO}`;
+  const INSTALL = `uv tool install --python 3.13 anycubic-slicer-mcp`;
   const UVX = JSON.stringify({ mcpServers: { "anycubic-slicer": {
-    command: "uvx", args: ["--python", "3.13", "--from", `git+${REPO}`, "anycubic-slicer-mcp"] } } }, null, 2);
+    command: "uvx", args: ["--python", "3.13", "anycubic-slicer-mcp"] } } }, null, 2);
   const HARNESS = `- insert:
     - id: mcp-anycubic-slicer
       name: '@deepseek-ai/dsh-mcp-client'
@@ -1099,7 +1099,7 @@ Don't change anything else on my system, and ask before running any command that
         serverName: anycubic-slicer
         transport: stdio
         command: uvx
-        args: ['--python', '3.13', '--from', 'git+${REPO}', 'anycubic-slicer-mcp']`;
+        args: ['--python', '3.13', 'anycubic-slicer-mcp']`;
   const COPY = {
     prompt: [PROMPT, "Prompt copied. Paste it into your agent."],
     claude: [`${INSTALL} && claude mcp add anycubic-slicer --scope user -- anycubic-slicer-mcp`, "Claude Code command copied. Paste it into your terminal."],

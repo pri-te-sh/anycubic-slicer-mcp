@@ -5,6 +5,7 @@
 
 <p align="center">
   <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/pri-te-sh/anycubic-slicer-mcp/actions/workflows/tests.yml/badge.svg"></a>
+  <a href="https://pypi.org/project/anycubic-slicer-mcp/"><img alt="PyPI" src="https://img.shields.io/pypi/v/anycubic-slicer-mcp?color=005aff"></a>
   <img alt="Windows and macOS" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-005aff">
   <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-005aff">
   <a href="https://modelcontextprotocol.io"><img alt="MCP server" src="https://img.shields.io/badge/MCP-server-005aff"></a>
@@ -100,10 +101,12 @@ You need:
 Then install the server:
 
 ```bash
-uv tool install --python 3.13 git+https://github.com/pri-te-sh/anycubic-slicer-mcp
+uv tool install --python 3.13 anycubic-slicer-mcp
 ```
 
 That puts an `anycubic-slicer-mcp` command on your PATH (`uv tool dir --bin` prints where).
+
+To try it without installing, any MCP client can also run it straight from [PyPI](https://pypi.org/project/anycubic-slicer-mcp/) with `uvx anycubic-slicer-mcp`. It's listed in the [official MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.pri-te-sh/anycubic-slicer-mcp`.
 
 ### Let your agent set it up
 
@@ -115,7 +118,7 @@ Set up the Anycubic Slicer MCP server (https://github.com/pri-te-sh/anycubic-sli
 1. Check that Anycubic Slicer Next is installed. On macOS look for /Applications/AnycubicSlicerNext.app; on Windows look for C:\Program Files\AnycubicSlicerNext\AnycubicSlicerNext.exe. If it is missing, stop and ask me to install it from Anycubic's website and open it once.
 2. Check that uv is installed (run: uv --version). If it is not, show me the official install command from https://docs.astral.sh/uv/getting-started/installation/ and wait for me to run it.
 3. Install the server:
-   uv tool install --python 3.13 git+https://github.com/pri-te-sh/anycubic-slicer-mcp
+   uv tool install --python 3.13 anycubic-slicer-mcp
 4. Find the full path of the anycubic-slicer-mcp command (run: uv tool dir --bin).
 5. Register it as a stdio MCP server named "anycubic-slicer" in the app you are running in. It needs no arguments or environment variables.
    - Claude Code: claude mcp add anycubic-slicer --scope user -- anycubic-slicer-mcp
