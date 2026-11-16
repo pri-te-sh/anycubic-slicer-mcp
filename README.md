@@ -1,6 +1,6 @@
 <!-- mcp-name: io.github.pri-te-sh/anycubic-slicer-mcp -->
 <p align="center">
-  <a href="https://pri-te-sh.github.io/anycubic-slicer-mcp/"><img src="docs/assets/hero.svg" alt="Anycubic Slicer MCP: your AI agent slices, checks and tunes your 3D prints in Anycubic Slicer Next" width="100%"></a>
+  <a href="https://pri-te-sh.github.io/anycubic-slicer-mcp/"><img src="https://raw.githubusercontent.com/pri-te-sh/anycubic-slicer-mcp/main/docs/assets/hero.svg" alt="Anycubic Slicer MCP: your AI agent slices, checks and tunes your 3D prints in Anycubic Slicer Next" width="100%"></a>
 </p>
 
 <p align="center">
@@ -8,8 +8,8 @@
   <img alt="Windows and macOS" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-005aff">
   <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-005aff">
   <a href="https://modelcontextprotocol.io"><img alt="MCP server" src="https://img.shields.io/badge/MCP-server-005aff"></a>
-  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-005aff"></a>
-  <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-005aff"></a>
+  <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp/blob/main/LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-005aff"></a>
+  <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp/blob/main/CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-005aff"></a>
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
   <a href="#install">Install</a> ·
   <a href="#tools">Tools</a> ·
   <a href="#faq">FAQ</a> ·
-  <a href="CONTRIBUTING.md">Contribute</a>
+  <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp/blob/main/CONTRIBUTING.md">Contribute</a>
 </p>
 
 # Anycubic Slicer MCP
@@ -47,7 +47,7 @@ A real run on the example gear, with a Kobra X and 0.4 mm nozzle: **30m 48s, 9.6
 
 | One layer, coloured by feature | Every layer, shaded by height | Shareable print card |
 |---|---|---|
-| <img src="docs/assets/preview-layer-12.png" alt="Layer 12 of the gear with outer walls, inner walls and gyroid infill" width="260"> | <img src="docs/assets/preview-all-layers.png" alt="All 45 layers of the gear shaded from dark blue at the bed to light blue at the top" width="260"> | <img src="docs/assets/print-card.png" alt="Print card showing print time, filament, layers, infill, walls and printer" width="260"> |
+| <img src="https://raw.githubusercontent.com/pri-te-sh/anycubic-slicer-mcp/main/docs/assets/preview-layer-12.png" alt="Layer 12 of the gear with outer walls, inner walls and gyroid infill" width="260"> | <img src="https://raw.githubusercontent.com/pri-te-sh/anycubic-slicer-mcp/main/docs/assets/preview-all-layers.png" alt="All 45 layers of the gear shaded from dark blue at the bed to light blue at the top" width="260"> | <img src="https://raw.githubusercontent.com/pri-te-sh/anycubic-slicer-mcp/main/docs/assets/print-card.png" alt="Print card showing print time, filament, layers, infill, walls and printer" width="260"> |
 
 `preview_gcode` also draws a side view for checking overhangs and supports. `animate_layers` saves a GIF of the print building up.
 
@@ -253,8 +253,8 @@ No. It's an independent project under the MIT licence and isn't affiliated with 
 
 ## Contributing
 
-The most useful thing you can do right now is try it on a printer other than the Kobra X and [report what happened](https://github.com/pri-te-sh/anycubic-slicer-mcp/issues/new?template=printer_report.yml). Bug fixes, new print defects for the doctor, calibration ideas and Linux support are all welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up; the test suite runs without the slicer installed.
+The most useful thing you can do right now is try it on a printer other than the Kobra X and [report what happened](https://github.com/pri-te-sh/anycubic-slicer-mcp/issues/new?template=printer_report.yml). Bug fixes, new print defects for the doctor, calibration ideas and Linux support are all welcome. See [CONTRIBUTING.md](https://github.com/pri-te-sh/anycubic-slicer-mcp/blob/main/CONTRIBUTING.md) to get set up; the test suite runs without the slicer installed.
 
 ## Licence
 
-[MIT](LICENSE)
+[MIT](https://github.com/pri-te-sh/anycubic-slicer-mcp/blob/main/LICENSE)

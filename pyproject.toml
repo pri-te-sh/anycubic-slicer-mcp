@@ -48,5 +48,8 @@ anycubic-slicer-mcp = "anycubic_slicer_mcp.server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["anycubic_slicer_mcp"]
 
+[tool.hatch.build.targets.sdist]
+include = ["anycubic_slicer_mcp", "tests", "README.md", "LICENSE", "pyproject.toml", "server.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
