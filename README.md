@@ -90,6 +90,8 @@ With LAN mode on (printer screen: Settings > Network > LAN Mode), the agent can 
 
 `control_print` can pause, resume or stop a print. It previews first and only acts after you confirm in the chat. It can't start prints, heat anything or move the head.
 
+Tested on a Kobra X with firmware 2.0.2.8: finding it, reading its status and the camera all work. Pause, resume and stop have so far only been tested against a simulated printer.
+
 It talks to the printer directly over your network, using the protocol the community has documented for the Kobra X, S1 and Kobra 3 family. No Anycubic account is involved. Turning LAN mode on disconnects the printer from Anycubic Cloud and the phone app, and the switch can't be changed while a print is running or paused.
 
 ### Calibration prints

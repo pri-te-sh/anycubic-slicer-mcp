@@ -5,7 +5,7 @@
 <script>document.documentElement.classList.replace("no-js", "js");try { var t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anycubic Slicer MCP: let your AI agent slice and tune 3D prints</title>
-<meta name="description" content="Anycubic Slicer MCP is a free, open-source MCP server for Anycubic Slicer Next on Windows and macOS. Claude, Cursor, Codex and other AI agents can slice STL, 3MF and STEP files, preview G-code, build filament profiles from a label photo, diagnose failed prints and cut multi-colour waste.">
+<meta name="description" content="Anycubic Slicer MCP is a free, open-source MCP server for Anycubic Slicer Next on Windows and macOS. Claude, Cursor, Codex and other AI agents can slice STL, 3MF and STEP files, preview G-code, build filament profiles from a label photo, diagnose failed prints, cut multi-colour waste and check a printer's live status and camera over LAN.">
 <meta name="keywords" content="Anycubic Slicer MCP, Anycubic Slicer Next, MCP server, Model Context Protocol, Kobra X, Kobra S1, Kobra 3, 3D printing AI, AI slicer, STL slicing, slicer automation, G-code preview, Claude 3D printing, filament profile">
 <link rel="canonical" href="https://pri-te-sh.github.io/anycubic-slicer-mcp/">
 <meta name="theme-color" content="#fbfbfd" media="(prefers-color-scheme: light)">
@@ -33,7 +33,7 @@
   "url": "https://pri-te-sh.github.io/anycubic-slicer-mcp/",
   "codeRepository": "https://github.com/pri-te-sh/anycubic-slicer-mcp",
   "license": "https://opensource.org/licenses/MIT",
-  "softwareVersion": "1.2.0",
+  "softwareVersion": "1.3.0",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Person", "name": "pcb", "url": "https://github.com/pri-te-sh" }
 }
@@ -48,7 +48,7 @@
    "name": "Does it send anything to my printer?",
    "acceptedAnswer": {
     "@type": "Answer",
-    "text": "No. It slices on your computer and writes G-code and .gcode.3mf files. You send them to the printer yourself."
+    "text": "It never starts a print. Slicing writes G-code and .gcode.3mf files on your computer, and you send them yourself. If you turn on LAN mode, the printer tools can read the printer's status and take a camera photo, and control_print can pause, resume or stop a print, but only after you say yes in the chat."
    }
   },
   {
@@ -97,6 +97,14 @@
    "acceptedAnswer": {
     "@type": "Answer",
     "text": "No. The server runs the slicer from the command line in the background. It reads the printer, process and filament you last picked in the app, so open it once to choose them."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Can my agent see what the printer is doing?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Yes, with LAN mode on (on the printer: Settings > Network > LAN Mode). printer_status reports the state, temperatures, the filament in each slot, how the last print ended and any error code with Anycubic's meaning. printer_camera_snapshot takes a photo with the built-in camera. LAN mode disconnects the printer from Anycubic Cloud and the phone app, and it can't be switched while a print is running or paused."
    }
   },
   {
@@ -806,6 +814,25 @@ saved     not yet (preview)</pre></div>
         </div>
       </article>
 
+      <article class="tile split wide reveal">
+        <div>
+          <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><circle cx="12" cy="10" r="2.5"/></svg></div>
+          <h3>Ask what the printer is doing.</h3>
+          <p>Turn on LAN mode and the agent can check on the printer itself. <code>printer_status</code> reads the state, nozzle and bed temperatures, the filament in each slot, how the last print ended and any error code, with Anycubic's meaning and a link to the fix. <code>printer_camera_snapshot</code> takes a photo with the built-in camera so the agent can look at the bed. If a print needs to stop, <code>control_print</code> pauses, resumes or stops it, and only after you say yes.</p>
+          <div class="tools"><code>find_printers</code><code>printer_status</code><code>printer_camera_snapshot</code><code>control_print</code></div>
+        </div>
+        <div>
+          <div class="code"><pre>printer   Kobra X, firmware 2.0.2.8
+state     idle (last print stopped)
+last job  stopped at layer 49 of 277
+nozzle    55 °C, target 0
+bed       64 °C, target 0
+slot 4    PETG #EFF0F1, ready
+errors    none</pre></div>
+          <p style="font-size:14px;margin-top:10px">A real reading from a Kobra X after a large PETG print was stopped. It talks to the printer over your own network, with no Anycubic account involved.</p>
+        </div>
+      </article>
+
       <article class="tile reveal">
         <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v3M12 18v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M4.2 16.5 6.8 15M17.2 9l2.6-1.5"/><circle cx="12" cy="12" r="4"/></svg></div>
         <h3>Show it the failed print.</h3>
@@ -866,8 +893,8 @@ saved     not yet (preview)</pre></div>
 
 <section aria-label="By the numbers">
   <div class="wrap numbers">
-    <div class="reveal"><div class="n accent" data-count="25">25</div><p>tools</p></div>
-    <div class="reveal d1"><div class="n" data-count="6">6</div><p>guided prompts</p></div>
+    <div class="reveal"><div class="n accent" data-count="29">29</div><p>tools</p></div>
+    <div class="reveal d1"><div class="n" data-count="7">7</div><p>guided prompts</p></div>
     <div class="reveal d2"><div class="n" data-count="13">13</div><p>print defects it can diagnose</p></div>
     <div class="reveal d3"><div class="n" data-count="2">2</div><p>platforms: Windows and macOS</p></div>
   </div>
@@ -896,7 +923,7 @@ saved     not yet (preview)</pre></div>
   <div class="wrap">
     <div class="section-head reveal">
       <p class="kicker">Reference</p>
-      <h2 id="tools-h">All 25 tools.</h2>
+      <h2 id="tools-h">All 29 tools.</h2>
       <p>Your agent sees these with full descriptions. You never need to call them yourself, but it helps to know what's there.</p>
     </div>
     <div class="toolgroups">
@@ -937,6 +964,12 @@ saved     not yet (preview)</pre></div>
         <dt>plan_project</dt><dd>Reads a folder or .zip, lays out every part on plates, and lists what it needs you to decide.</dd>
         <dt>slice_project</dt><dd>Slices each plate once you've answered and approved, with real times and weights.</dd>
       </dl></div>
+      <div class="toolgroup reveal"><h3>Printer (LAN mode)</h3><dl>
+        <dt>find_printers</dt><dd>Looks for Anycubic printers on your network and says whether LAN mode is on.</dd>
+        <dt>printer_status</dt><dd>State, job, temperatures, filament slots, how the last print ended and error codes with their meaning.</dd>
+        <dt>printer_camera_snapshot</dt><dd>One photo from the printer's camera. Needs ffmpeg.</dd>
+        <dt>control_print</dt><dd>Pause, resume or stop the current print, after a preview and your yes.</dd>
+      </dl></div>
       <div class="toolgroup reveal d1"><h3>Guided prompts</h3><dl>
         <dt>print_this_project</dt><dd>Asks its questions, shows the plates, slices when you say go.</dd>
         <dt>setup_check</dt><dd>Confirms the install works with a test slice.</dd>
@@ -944,6 +977,7 @@ saved     not yet (preview)</pre></div>
         <dt>diagnose_from_photos</dt><dd>Failed-print photos to a fix.</dd>
         <dt>make_it_stronger</dt><dd>Asks how the part is loaded, then compares the cost of stronger settings.</dd>
         <dt>multicolor_waste</dt><dd>Walks through cutting purge waste.</dd>
+        <dt>check_my_printer</dt><dd>Reads the status, looks through the camera and explains any error.</dd>
       </dl></div>
     </div>
   </div>
@@ -956,8 +990,8 @@ saved     not yet (preview)</pre></div>
       <h2 id="safe-h">Your printer stays yours.</h2>
     </div>
     <div class="safety">
-      <div class="reveal"><h3>It never prints.</h3><p>The server writes G-code and .gcode.3mf files on your computer. Sending them to the printer is always your call.</p></div>
-      <div class="reveal d1"><h3>Runs on your machine.</h3><p>It drives the slicer's own command line. Models, presets and spool records stay on your computer.</p></div>
+      <div class="reveal"><h3>It never starts a print.</h3><p>The server writes G-code and .gcode.3mf files on your computer. Sending them to the printer is always your call. Pausing, resuming or stopping a print waits for your yes.</p></div>
+      <div class="reveal d1"><h3>Runs on your machine.</h3><p>It drives the slicer's own command line. Models, presets and spool records stay on your computer. The printer tools only talk to addresses on your own network, and the printer's login stays in memory.</p></div>
       <div class="reveal d2"><h3>Refuses risky files.</h3><p>Project files that carry post-processing scripts are rejected, since those scripts can run programs. Custom G-code templates are off limits unless you turn them on.</p></div>
     </div>
   </div>
@@ -1035,13 +1069,14 @@ saved     not yet (preview)</pre></div>
   <div class="wrap narrow">
     <div class="section-head reveal"><h2 id="faq-h">Questions.</h2></div>
     <div class="reveal">
-      <details><summary>Does it send anything to my printer?</summary><p>No. It slices on your computer and writes G-code and .gcode.3mf files. You send them to the printer yourself.</p></details>
+      <details><summary>Does it send anything to my printer?</summary><p>It never starts a print. Slicing writes G-code and .gcode.3mf files on your computer, and you send them yourself. If you turn on LAN mode, the printer tools can read the printer's status and take a camera photo, and <code>control_print</code> can pause, resume or stop a print, but only after you say yes in the chat.</p></details>
       <details><summary>Can an AI agent slice STL files for my Anycubic printer?</summary><p>Yes. Point your agent at an STL, 3MF, OBJ or STEP file and it runs Anycubic Slicer Next on your computer with the printer, process and filament you choose. You get G-code, a printer-ready .gcode.3mf, the print time, the filament weight and pictures of the toolpaths.</p></details>
       <details><summary>Which printers does it support?</summary><p>Any printer that has a preset in Anycubic Slicer Next, because the server reads the slicer's own presets. That covers the Kobra X, Kobra S1, Kobra 4, Kobra 3, Kobra 2 and Kobra 1 families (see <a href="#printers">the full list</a>). It has been tested end to end on a Kobra X with a 0.4 mm nozzle. If you run it on another model, a <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp/issues/new?template=printer_report.yml">printer report</a> helps a lot.</p></details>
       <details><summary>Which file formats does it accept?</summary><p>STL, 3MF, OBJ and STEP models, or a whole folder or .zip of them for a multi-part project. It writes standard G-code and a .gcode.3mf you can send to the printer or open in the slicer.</p></details>
       <details><summary>Does it work with OrcaSlicer or Bambu Studio?</summary><p>Not yet. It drives Anycubic Slicer Next, which is built on OrcaSlicer. Support for other OrcaSlicer-based slicers would be a welcome contribution.</p></details>
       <details><summary>Which AI apps can use it?</summary><p>Anything that speaks the Model Context Protocol over stdio: Claude Code, Claude Desktop, Cursor, VS Code, Codex, Antigravity, DeepSeek Harness and others.</p></details>
       <details><summary>Do I need to keep the slicer window open?</summary><p>No. The server runs the slicer from the command line in the background. It reads the printer, process and filament you last picked in the app, so open it once to choose them.</p></details>
+      <details><summary>Can my agent see what the printer is doing?</summary><p>Yes, with LAN mode on (on the printer: Settings > Network > LAN Mode). <code>printer_status</code> reports the state, temperatures, the filament in each slot, how the last print ended and any error code with Anycubic's meaning. <code>printer_camera_snapshot</code> takes a photo with the built-in camera. LAN mode disconnects the printer from Anycubic Cloud and the phone app, and it can't be switched while a print is running or paused.</p></details>
       <details><summary>Does it work on Linux?</summary><p>Not yet. It supports Windows and macOS. Pull requests for Linux are welcome.</p></details>
       <details><summary>My slicer is installed somewhere unusual.</summary><p>Set <code>ANYCUBIC_SLICER_EXE</code> to the slicer program and, if needed, <code>ANYCUBIC_SLICER_DATA</code> to its data folder, in your MCP client's config for this server.</p></details>
       <details><summary>Is this made by Anycubic?</summary><p>No. It's an independent open-source project under the MIT licence and isn't affiliated with or endorsed by Anycubic.</p></details>
