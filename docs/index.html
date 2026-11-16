@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anycubic Slicer MCP: let your AI agent slice and tune 3D prints</title>
 <meta name="description" content="Anycubic Slicer MCP is a free, open-source MCP server for Anycubic Slicer Next on Windows and macOS. Claude, Cursor, Codex and other AI agents can slice STL, 3MF and STEP files, preview G-code, build filament profiles from a label photo, diagnose failed prints and cut multi-colour waste.">
-<meta name="keywords" content="Anycubic Slicer MCP, Anycubic Slicer Next, MCP server, Model Context Protocol, Kobra, 3D printing AI, slicer automation, G-code preview, Claude 3D printing, filament profile">
+<meta name="keywords" content="Anycubic Slicer MCP, Anycubic Slicer Next, MCP server, Model Context Protocol, Kobra X, Kobra S1, Kobra 3, 3D printing AI, AI slicer, STL slicing, slicer automation, G-code preview, Claude 3D printing, filament profile">
 <link rel="canonical" href="https://pri-te-sh.github.io/anycubic-slicer-mcp/">
 <meta name="theme-color" content="#fbfbfd" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -28,6 +28,7 @@
   "name": "Anycubic Slicer MCP",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Windows, macOS",
+  "keywords": "MCP server, Anycubic Slicer Next, 3D printing, AI agent, STL, G-code, Kobra",
   "description": "An MCP server that lets AI agents slice, preview, diagnose and optimise 3D prints with Anycubic Slicer Next.",
   "url": "https://pri-te-sh.github.io/anycubic-slicer-mcp/",
   "codeRepository": "https://github.com/pri-te-sh/anycubic-slicer-mcp",
@@ -39,14 +40,90 @@
 </script>
 <script type="application/ld+json">
 {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {"@type": "Question", "name": "Does Anycubic Slicer MCP send anything to my printer?", "acceptedAnswer": {"@type": "Answer", "text": "No. It slices on your computer and writes G-code and .gcode.3mf files. You send them to the printer yourself."}},
-    {"@type": "Question", "name": "Which printers does it support?", "acceptedAnswer": {"@type": "Answer", "text": "Any printer that has a preset in Anycubic Slicer Next, because it reads the slicer's own presets. It has been tested end to end on a Kobra X with a 0.4 mm nozzle."}},
-    {"@type": "Question", "name": "Which AI apps can use it?", "acceptedAnswer": {"@type": "Answer", "text": "Any app that speaks the Model Context Protocol over stdio, including Claude Code, Claude Desktop, Cursor, VS Code, Codex and Antigravity."}},
-    {"@type": "Question", "name": "Is it an official Anycubic product?", "acceptedAnswer": {"@type": "Answer", "text": "No. It is an independent open-source project under the MIT licence and is not affiliated with Anycubic."}}
-  ]
+ "@context": "https://schema.org",
+ "@type": "FAQPage",
+ "mainEntity": [
+  {
+   "@type": "Question",
+   "name": "Does it send anything to my printer?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No. It slices on your computer and writes G-code and .gcode.3mf files. You send them to the printer yourself."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Can an AI agent slice STL files for my Anycubic printer?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Yes. Point your agent at an STL, 3MF, OBJ or STEP file and it runs Anycubic Slicer Next on your computer with the printer, process and filament you choose. You get G-code, a printer-ready .gcode.3mf, the print time, the filament weight and pictures of the toolpaths."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Which printers does it support?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Any printer that has a preset in Anycubic Slicer Next, because the server reads the slicer's own presets. That covers the Kobra X, Kobra S1, Kobra 4, Kobra 3, Kobra 2 and Kobra 1 families (see the full list). It has been tested end to end on a Kobra X with a 0.4 mm nozzle. If you run it on another model, a printer report helps a lot."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Which file formats does it accept?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "STL, 3MF, OBJ and STEP models, or a whole folder or .zip of them for a multi-part project. It writes standard G-code and a .gcode.3mf you can send to the printer or open in the slicer."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Does it work with OrcaSlicer or Bambu Studio?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Not yet. It drives Anycubic Slicer Next, which is built on OrcaSlicer. Support for other OrcaSlicer-based slicers would be a welcome contribution."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Which AI apps can use it?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Anything that speaks the Model Context Protocol over stdio: Claude Code, Claude Desktop, Cursor, VS Code, Codex, Antigravity, DeepSeek Harness and others."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Do I need to keep the slicer window open?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No. The server runs the slicer from the command line in the background. It reads the printer, process and filament you last picked in the app, so open it once to choose them."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Does it work on Linux?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Not yet. It supports Windows and macOS. Pull requests for Linux are welcome."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "My slicer is installed somewhere unusual.",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Set ANYCUBIC_SLICER_EXE to the slicer program and, if needed, ANYCUBIC_SLICER_DATA to its data folder, in your MCP client's config for this server."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Is this made by Anycubic?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "No. It's an independent open-source project under the MIT licence and isn't affiliated with or endorsed by Anycubic."
+   }
+  }
+ ]
 }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -387,6 +464,17 @@ h3 { font-size: 24px; line-height: 1.2; letter-spacing: -.02em; margin: 0 0 10px
 .toolgroup dd { margin: 3px 0 0; color: var(--muted); font-size: 15px; }
 @media (max-width: 820px) { .toolgroups { grid-template-columns: 1fr; } }
 
+/* printers */
+.printers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.printer-row { background: var(--card); border-radius: 20px; padding: 22px 24px; box-shadow: var(--shadow); }
+.printer-row h3 { font-size: 17px; margin: 0 0 10px; }
+.printer-row ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.printer-row li { font-size: 13px; background: var(--bg-alt); color: var(--ink-2); padding: 4px 10px; border-radius: 980px; }
+.printer-row li b { font-weight: 600; color: #fff; background: var(--accent); border-radius: 980px; padding: 1px 7px; margin-left: 4px; font-size: 11px; }
+.printers-note { text-align: center; color: var(--muted); font-size: 15px; margin: 26px 0 0; }
+@media (max-width: 900px) { .printers { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .printers { grid-template-columns: 1fr; } }
+
 /* safety */
 .safety { display: grid; grid-template-columns: repeat(3, 1fr); gap: 34px; }
 .safety h3 { font-size: 19px; }
@@ -464,6 +552,7 @@ footer a { color: var(--ink-2); }
     <a class="name" href="#top">Anycubic Slicer MCP</a>
     <div class="links">
       <a href="#features">Features</a>
+      <a href="#printers">Printers</a>
       <a href="#tools">Tools</a>
       <a href="#install">Install</a>
       <a href="#faq">FAQ</a>
@@ -478,7 +567,7 @@ footer a { color: var(--ink-2); }
   <div class="wrap hero-grid">
     <div class="hero-copy">
       <h1 class="rise"><span class="grad">Anycubic Slicer MCP</span></h1>
-      <p class="lede rise d1">An MCP server for Anycubic Slicer Next. Tell your AI agent what to print and it slices the model, shows you the toolpaths and gives you the time and filament. <strong>You still press print.</strong></p>
+      <p class="lede rise d1">An MCP server for Anycubic Slicer Next. Tell your AI agent what to print and it slices your STL, 3MF or STEP file, shows you the toolpaths and gives you the time and filament. <strong>You still press print.</strong></p>
       <div class="actions rise d2">
         <button class="btn btn-primary" data-copy="prompt" type="button">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
@@ -528,7 +617,7 @@ footer a { color: var(--ink-2); }
           </div></div>
         </div>
       </div>
-      <template data-key="slice" data-label="Slice">
+      <div class="scene" hidden data-key="slice" data-label="Slice">
         <div data-who="user"><p class="text">Slice gear.stl for my Kobra X. 20% gyroid, three walls.</p></div>
         <div data-who="ai">
           <span class="call">slice_model(models=["gear.stl"], overrides={"sparse_infill_density": "20%", "sparse_infill_pattern": "gyroid", "wall_loops": 3})</span>
@@ -545,8 +634,8 @@ footer a { color: var(--ink-2); }
             </dl>
           </div>
         </div>
-      </template>
-      <template data-key="project" data-label="Whole project">
+      </div>
+      <div class="scene" hidden data-key="project" data-label="Whole project">
         <div data-who="user"><p class="text">Here's the desk organiser kit. Plan the plates and slice it.</p><div class="attach"><span class="attach-chip"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h3l1.5 1.5h2.5A1.5 1.5 0 0 1 13 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 11.5z"/></svg>desk-organiser.zip</span></div></div>
         <div data-who="ai">
           <span class="call">plan_project(path="desk-organiser.zip")</span>
@@ -573,8 +662,8 @@ footer a { color: var(--ink-2); }
             </dl>
           </div>
         </div>
-      </template>
-      <template data-key="label" data-label="Spool label">
+      </div>
+      <div class="scene" hidden data-key="label" data-label="Spool label">
         <div data-who="user"><p class="text">Here's my new spool. Make a filament profile from the label.</p><div class="attach"><span class="attach-chip"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"/><circle cx="6" cy="7" r="1.3"/><path d="m3 12 3.5-3.5 2.5 2.5 2-2 2.5 2.5"/></svg>spool-label.jpg</span></div></div>
         <div data-who="ai">
           <span class="call">create_filament_profile(material="PETG", brand="Example", colour_name="Galaxy Black", colour_hex="#1B1B1F", nozzle_min=230, nozzle_max=250, bed_min=70, bed_max=80, weight_g=1000)</span>
@@ -588,8 +677,8 @@ footer a { color: var(--ink-2); }
             <dt>Saved</dt><dd>Not yet, waiting for your OK</dd>
           </dl>
         </div>
-      </template>
-      <template data-key="doctor" data-label="Failed print">
+      </div>
+      <div class="scene" hidden data-key="doctor" data-label="Failed print">
         <div data-who="user"><p class="text">My last print has strings everywhere and the corners lifted off the bed.</p><div class="attach"><span class="attach-chip"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"/><circle cx="6" cy="7" r="1.3"/><path d="m3 12 3.5-3.5 2.5 2.5 2-2 2.5 2.5"/></svg>front.jpg</span><span class="attach-chip"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"/><circle cx="6" cy="7" r="1.3"/><path d="m3 12 3.5-3.5 2.5 2.5 2-2 2.5 2.5"/></svg>corner.jpg</span></div></div>
         <div data-who="ai">
           <span class="call">diagnose_print(issues=["stringing", "warping"])</span>
@@ -607,8 +696,8 @@ footer a { color: var(--ink-2); }
           </table>
           <p class="aside">Also worth doing: dry the filament and wash the plate with dish soap.</p>
         </div>
-      </template>
-      <template data-key="strength" data-label="Stronger part">
+      </div>
+      <div class="scene" hidden data-key="strength" data-label="Stronger part">
         <div data-who="user"><p class="text">The gear teeth get pushed sideways. Make it stronger and tell me what that costs.</p></div>
         <div data-who="ai">
           <span class="call">analyze_strength(model="gear.stl", load="bending", load_axis="x")</span>
@@ -619,8 +708,8 @@ footer a { color: var(--ink-2); }
             <div class="win"><p class="label">Stronger</p><p class="num">35m 45s</p><p class="sub">12.21 g · 5 walls · 25% gyroid</p><p class="delta">+16% time · +26% filament</p></div>
           </div>
         </div>
-      </template>
-      <template data-key="multicolour" data-label="Multi-colour">
+      </div>
+      <div class="scene" hidden data-key="multicolour" data-label="Multi-colour">
         <div data-who="user"><p class="text">Two cubes, one black and one white. How much filament goes to colour changes?</p></div>
         <div data-who="ai">
           <span class="call">optimize_multicolor(models=["a.stl", "b.stl"], object_filaments=[1, 2], filament_colours=["#000000", "#FFFFFF"])</span>
@@ -632,15 +721,15 @@ footer a { color: var(--ink-2); }
             <li><span>Flush into infill and support</span><span>no change</span></li>
           </ul>
         </div>
-      </template>
-      <template data-key="calibration" data-label="Calibration">
+      </div>
+      <div class="scene" hidden data-key="calibration" data-label="Calibration">
         <div data-who="user"><p class="text">Print me a temperature tower for this PLA.</p></div>
         <div data-who="ai">
           <span class="call">make_calibration_print(kind="temperature_tower")</span>
           <p class="reply">Sliced and ready: 51m 43s. Eight 8 mm blocks, hottest at the bottom, and the G-code changes the nozzle temperature at each block. Pick the block with the least stringing and the cleanest bridge.</p>
           <div class="tower" aria-label="Temperature tower blocks from 230 °C at the bottom to 195 °C at the top"><div style="--i:7"><span>195 °C</span></div><div style="--i:6"><span>200 °C</span></div><div style="--i:5"><span>205 °C</span></div><div style="--i:4"><span>210 °C</span></div><div style="--i:3"><span>215 °C</span></div><div style="--i:2"><span>220 °C</span></div><div style="--i:1"><span>225 °C</span></div><div style="--i:0"><span>230 °C</span></div></div>
         </div>
-      </template>
+      </div>
     </div>
   </div>
 </section>
@@ -675,7 +764,7 @@ footer a { color: var(--ink-2); }
     <div class="section-head reveal">
       <p class="kicker">Beyond slicing</p>
       <h2 id="feat-h">The jobs that used to eat your evening.</h2>
-      <p>Profiles, failed prints, weak parts and wasted filament. Hand them to the agent and it does the fiddly part with the slicer you already use.</p>
+      <p>Filament profiles, failed 3D prints, weak parts and wasted filament. Hand them to the agent and it does the fiddly part with the slicer you already use.</p>
     </div>
     <div class="bento">
       <article class="tile split wide reveal">
@@ -784,7 +873,26 @@ saved     not yet (preview)</pre></div>
   </div>
 </section>
 
-<section class="alt" id="tools" aria-labelledby="tools-h">
+<section class="alt" id="printers" aria-labelledby="printers-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="kicker">Printers</p>
+      <h2 id="printers-h">Made for Anycubic 3D printers.</h2>
+      <p>The server reads the printer presets that ship with Anycubic Slicer Next, so it works with any of these models (several also come with a 0.25 mm nozzle preset). It has been tested end to end on the Kobra X with a 0.4 mm nozzle.</p>
+    </div>
+    <div class="printers">
+      <div class="printer-row reveal"><h3>Kobra X</h3><ul><li>Anycubic Kobra X <b>tested</b></li></ul></div>
+      <div class="printer-row reveal"><h3>Kobra S1</h3><ul><li>Anycubic Kobra S1</li><li>Anycubic Kobra S1 Max</li></ul></div>
+      <div class="printer-row reveal"><h3>Kobra 4</h3><ul><li>Anycubic Kobra 4</li></ul></div>
+      <div class="printer-row reveal"><h3>Kobra 3</h3><ul><li>Anycubic Kobra 3</li><li>Anycubic Kobra 3 V2</li><li>Anycubic Kobra 3 Max</li><li>Anycubic Kobra 3 Max V2</li></ul></div>
+      <div class="printer-row reveal"><h3>Kobra 2</h3><ul><li>Anycubic Kobra 2</li><li>Anycubic Kobra 2 Neo</li><li>Anycubic Kobra 2 Plus</li><li>Anycubic Kobra 2 Pro</li><li>Anycubic Kobra 2 Max</li></ul></div>
+      <div class="printer-row reveal"><h3>Kobra 1</h3><ul><li>Anycubic Kobra 1</li><li>Anycubic Kobra 1 Plus</li><li>Anycubic Kobra 1 Max</li></ul></div>
+    </div>
+    <p class="printers-note reveal">Running it on another model? A <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp/issues/new?template=printer_report.yml">printer report</a> tells everyone it works.</p>
+  </div>
+</section>
+
+<section id="tools" aria-labelledby="tools-h">
   <div class="wrap">
     <div class="section-head reveal">
       <p class="kicker">Reference</p>
@@ -841,7 +949,7 @@ saved     not yet (preview)</pre></div>
   </div>
 </section>
 
-<section aria-labelledby="safe-h">
+<section class="alt" aria-labelledby="safe-h">
   <div class="wrap">
     <div class="section-head reveal">
       <p class="kicker">Local and careful</p>
@@ -855,7 +963,7 @@ saved     not yet (preview)</pre></div>
   </div>
 </section>
 
-<section class="alt" id="install" aria-labelledby="install-h">
+<section id="install" aria-labelledby="install-h">
   <div class="wrap narrow">
     <div class="section-head reveal">
       <p class="kicker">Install</p>
@@ -923,12 +1031,15 @@ saved     not yet (preview)</pre></div>
   </div>
 </section>
 
-<section id="faq" aria-labelledby="faq-h">
+<section class="alt" id="faq" aria-labelledby="faq-h">
   <div class="wrap narrow">
     <div class="section-head reveal"><h2 id="faq-h">Questions.</h2></div>
     <div class="reveal">
       <details><summary>Does it send anything to my printer?</summary><p>No. It slices on your computer and writes G-code and .gcode.3mf files. You send them to the printer yourself.</p></details>
-      <details><summary>Which printers does it support?</summary><p>Any printer that has a preset in Anycubic Slicer Next, because the server reads the slicer's own presets. It has been tested end to end on a Kobra X with a 0.4 mm nozzle. If you run it on another model, a <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp/issues/new?template=printer_report.yml">printer report</a> helps a lot.</p></details>
+      <details><summary>Can an AI agent slice STL files for my Anycubic printer?</summary><p>Yes. Point your agent at an STL, 3MF, OBJ or STEP file and it runs Anycubic Slicer Next on your computer with the printer, process and filament you choose. You get G-code, a printer-ready .gcode.3mf, the print time, the filament weight and pictures of the toolpaths.</p></details>
+      <details><summary>Which printers does it support?</summary><p>Any printer that has a preset in Anycubic Slicer Next, because the server reads the slicer's own presets. That covers the Kobra X, Kobra S1, Kobra 4, Kobra 3, Kobra 2 and Kobra 1 families (see <a href="#printers">the full list</a>). It has been tested end to end on a Kobra X with a 0.4 mm nozzle. If you run it on another model, a <a href="https://github.com/pri-te-sh/anycubic-slicer-mcp/issues/new?template=printer_report.yml">printer report</a> helps a lot.</p></details>
+      <details><summary>Which file formats does it accept?</summary><p>STL, 3MF, OBJ and STEP models, or a whole folder or .zip of them for a multi-part project. It writes standard G-code and a .gcode.3mf you can send to the printer or open in the slicer.</p></details>
+      <details><summary>Does it work with OrcaSlicer or Bambu Studio?</summary><p>Not yet. It drives Anycubic Slicer Next, which is built on OrcaSlicer. Support for other OrcaSlicer-based slicers would be a welcome contribution.</p></details>
       <details><summary>Which AI apps can use it?</summary><p>Anything that speaks the Model Context Protocol over stdio: Claude Code, Claude Desktop, Cursor, VS Code, Codex, Antigravity, DeepSeek Harness and others.</p></details>
       <details><summary>Do I need to keep the slicer window open?</summary><p>No. The server runs the slicer from the command line in the background. It reads the printer, process and filament you last picked in the app, so open it once to choose them.</p></details>
       <details><summary>Does it work on Linux?</summary><p>Not yet. It supports Windows and macOS. Pull requests for Linux are welcome.</p></details>
@@ -938,7 +1049,7 @@ saved     not yet (preview)</pre></div>
   </div>
 </section>
 
-<section class="alt contribute" aria-labelledby="contrib-h">
+<section class="contribute" aria-labelledby="contrib-h">
   <div class="wrap narrow">
     <p class="kicker reveal">Open source</p>
     <h2 class="reveal" id="contrib-h">Got a different printer? Help it print better.</h2>
@@ -1063,7 +1174,7 @@ Don't change anything else on my system, and ask before running any command that
   const demo = document.getElementById("demo");
   const chat = document.getElementById("chat");
   const log = chat.querySelector(".log");
-  const scenes = [...demo.querySelectorAll("template")];
+  const scenes = [...demo.querySelectorAll(".scene")];
   const tabsBox = demo.querySelector(".demo-tabs");
   const HOLD = 5000;
   let run = 0, auto = !still, started = false, nextTimer, demoIO;
@@ -1099,7 +1210,7 @@ Don't change anything else on my system, and ask before running any command that
     }
     log.innerHTML = ""; chat.scrollTo({ top: 0, behavior: "auto" });
     log.classList.remove("leaving"); log.classList.add("entering"); void log.offsetWidth; log.classList.remove("entering");
-    for (const turn of scenes[i].content.querySelectorAll("[data-who]")) {
+    for (const turn of scenes[i].querySelectorAll(":scope > [data-who]")) {
       if (my !== run) return;
       if (turn.dataset.who === "user") {
         const row = el('<div class="turn user"><div class="bubble"><p class="text"></p></div></div>');

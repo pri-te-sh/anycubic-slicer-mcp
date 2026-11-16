@@ -236,7 +236,10 @@ Nothing is needed for a standard install. These environment variables cover the 
 ## FAQ
 
 **Which printers work?**
-Any printer with a preset in Anycubic Slicer Next, since the server reads the slicer's own presets. It has been tested end to end on a Kobra X with a 0.4 mm nozzle. If you try another model, please send a [printer report](https://github.com/pri-te-sh/anycubic-slicer-mcp/issues/new?template=printer_report.yml).
+Any printer with a preset in Anycubic Slicer Next, since the server reads the slicer's own presets. That includes the Anycubic Kobra X, Kobra S1 and S1 Max, Kobra 4, Kobra 3 (V2, Max, Max V2), Kobra 2 (Neo, Plus, Pro, Max) and Kobra 1 (Plus, Max). It has been tested end to end on a Kobra X with a 0.4 mm nozzle. If you try another model, please send a [printer report](https://github.com/pri-te-sh/anycubic-slicer-mcp/issues/new?template=printer_report.yml).
+
+**Does it work with OrcaSlicer or Bambu Studio?**
+Not yet. It drives Anycubic Slicer Next, which is built on OrcaSlicer. Support for other OrcaSlicer-based slicers would be a welcome contribution.
 
 **Does the slicer window need to be open?**
 No. The server runs the slicer in the background. It uses the printer, process and filament you last picked in the app, so open the app once to choose them.
