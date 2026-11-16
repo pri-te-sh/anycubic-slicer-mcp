@@ -1,3 +1,4 @@
+<!-- mcp-name: io.github.pri-te-sh/anycubic-slicer-mcp -->
 <p align="center">
   <a href="https://pri-te-sh.github.io/anycubic-slicer-mcp/"><img src="docs/assets/hero.svg" alt="Anycubic Slicer MCP: your AI agent slices, checks and tunes your 3D prints in Anycubic Slicer Next" width="100%"></a>
 </p>
