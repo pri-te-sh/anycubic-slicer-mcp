@@ -15,6 +15,7 @@ import base64
 import hashlib
 import ipaddress
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -30,6 +31,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+
+# httpx logs each request URL at INFO, and the MCP server logs at INFO. The handshake URL carries a one-time
+# signature, so keep those lines out of the client's logs.
+for _name in ("httpx", "httpcore"):
+    logging.getLogger(_name).setLevel(logging.WARNING)
 from urllib.parse import urlparse
 
 from .install import state_dir
@@ -344,6 +350,7 @@ class Link:
         self._rc: Any = None
         self._client = None
         self._tmp: tempfile.TemporaryDirectory | None = None
+        self._seen_ids: set[tuple[str, str]] = set()
 
     # topics
     def _sub_topic(self) -> str:
@@ -397,6 +404,11 @@ class Link:
                 return
             if isinstance(data, dict):
                 with self._cv:
+                    mid = data.get("msgid")
+                    if mid and (msg.topic, mid) in self._seen_ids:
+                        return  # the printer sends each report twice
+                    if mid:
+                        self._seen_ids.add((msg.topic, mid))
                     self.messages.append((msg.topic, data))
                     self._cv.notify_all()
 
@@ -567,8 +579,11 @@ class State:
             return str(job["state"])
         if self.job:
             return "printing"
-        if self.print_state in ("stoped", "finished", "failed"):
-            return "idle (last print " + ("stopped" if self.print_state == "stoped" else self.print_state) + ")"
+        ended = self.print_state if self.print_state in ("stoped", "finished", "failed") else None
+        if not ended and isinstance(self.last_job, dict) and self.last_job.get("state") in ("stoped", "finished", "failed"):
+            ended = self.last_job["state"]
+        if ended:
+            return "idle (last print " + ("stopped" if ended == "stoped" else ended) + ")"
         ws = self.work.get("state")
         return "busy" if ws == "busy" else "idle"
 
@@ -587,6 +602,18 @@ class State:
                "filament_used_mm": j.get("supplies_usage"), "task_id": self.task_id()}
         return {k: v for k, v in out.items() if v is not None}
 
+    def last_job_summary(self) -> dict | None:
+        j = self.last_job
+        if not j or self.job:
+            return None
+        st = j.get("state")
+        out = {"file": j.get("filename"), "ended": "stopped" if st == "stoped" else st,
+               "layer": j.get("curr_layer"), "total_layers": j.get("total_layers"),
+               "progress_pct": j.get("progress") or None,  # a stopped job reports 0 here, which says nothing
+               "filament_used_mm": round(j["supplies_usage"]) if isinstance(j.get("supplies_usage"), (int, float)) else None,
+               "task_id": str(j["task_id"]) if j.get("task_id") not in (None, "") else None}
+        return {k: v for k, v in out.items() if v is not None}
+
     def filament(self) -> dict:
         boxes = []
         for bid, b in sorted(self.boxes.items(), key=lambda kv: str(kv[0])):
@@ -597,16 +624,19 @@ class State:
                     "slot": idx + 1 if isinstance(idx, int) else idx, "material": s.get("type") or None,
                     "colour": None if empty else _hex(s.get("color")),
                     "remaining_pct": s.get("consumables_percent"), "sku": s.get("sku") or None,
-                    "state": "empty" if empty else ("loaded" if s.get("status") == 5 else "present"),
+                    "state": "empty" if empty else ("ready" if s.get("status") == 5 else "present"),
                 }.items() if v is not None})
             ls = b.get("loaded_slot")
-            entry = {"box": bid, "kind": "built-in unit" if bid == 0 and self.model_id == "20030" else "ACE",
-                     "loaded_slot": ls + 1 if isinstance(ls, int) and ls >= 0 else None,
-                     "temperature_c": b.get("temp"), "humidity_pct": b.get("humidity") or None,
+            entry = {"box": bid,
+                     "slot_in_nozzle": ls + 1 if isinstance(ls, int) and ls >= 0 else "none",
+                     "temperature_c": b.get("temp") or None, "humidity_pct": b.get("humidity") or None,
                      "drying": b.get("drying_status") if isinstance(b.get("drying_status"), dict) and
                      b["drying_status"].get("status") else None, "slots": slots}
             boxes.append({k: v for k, v in entry.items() if v is not None})
         out: dict = {"boxes": boxes}
+        if any("remaining_pct" in s for b in boxes for s in b.get("slots", [])):
+            out["note"] = ("remaining_pct is the figure stored on the printer, not a measurement; "
+                           "it can read 100 after a long print.")
         if self.external:
             e = self.external
             out["external_spool"] = {k: v for k, v in {"material": e.get("type") or None, "colour": _hex(e.get("color")),
@@ -622,8 +652,7 @@ class State:
         out = {"printer": {"host": host, "model": model, "firmware": self.info.get("version"),
                            "name": self.info.get("printerName") or self.info.get("deviceName")},
                "state": self.state_name(), "job": self.job_summary(),
-               "last_job": {k: self.last_job.get(k) for k in ("filename", "progress", "print_status")
-                            if self.last_job.get(k) is not None} if self.last_job and not self.job else None,
+               "last_job": self.last_job_summary(),
                "temperatures": temps or None,
                "fans_pct": {k: v for k, v in self.fans.items() if k.endswith(("pct", "level"))} or None,
                "lights": lights or None, "filament": self.filament(),
@@ -711,8 +740,11 @@ def _stream_url(host: str, urls: dict) -> str | None:
 
 
 def grab_frame(url: str, out: Path, ffmpeg: str, seconds: float = 20.0) -> None:
+    """Save one JPEG from the HTTP-FLV stream. A small probe keeps ffmpeg from buffering several seconds
+    of the live stream before decoding (on a Kobra X: about 7 s instead of 21 s)."""
     import httpx
-    proc = subprocess.Popen([ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "flv", "-i", "pipe:0",
+    proc = subprocess.Popen([ffmpeg, "-hide_banner", "-loglevel", "error", "-probesize", "32768",
+                             "-analyzeduration", "500000", "-f", "flv", "-i", "pipe:0",
                              "-frames:v", "1", "-q:v", "2", "-y", str(out)],
                             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     end = time.monotonic() + seconds

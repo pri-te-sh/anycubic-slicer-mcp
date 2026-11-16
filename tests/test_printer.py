@@ -117,11 +117,30 @@ def test_state_merges_partial_reports():
     assert s["errors"][0]["code"] == 11518 and "clog" in s["errors"][0]["meaning"].lower()
     assert s["errors"][0]["wiki"].endswith("/11518-code/kx")
     box = s["filament"]["boxes"][0]
-    assert box["kind"] == "built-in unit" and box["loaded_slot"] == 2 and "humidity_pct" not in box
-    assert [x["state"] for x in box["slots"]] == ["loaded", "loaded", "empty"]
+    assert box["slot_in_nozzle"] == 2 and "humidity_pct" not in box and "kind" not in box
+    assert [x["state"] for x in box["slots"]] == ["ready", "ready", "empty"]
+    assert "not a measurement" in s["filament"]["note"]
     assert box["slots"][1]["colour"] == "#000000" and box["slots"][0]["remaining_pct"] == 80
     assert s["lights"] == {"camera": "on"} and s["camera_present"] is True and s["usb_drive"] is False
     assert s["printer"]["firmware"] == "2.0.2.2"
+
+
+def test_stopped_last_job_from_a_real_kobra_x():
+    # shape of a real Kobra X (firmware 2.0.2.8) report after a print was stopped
+    st = lan.State("20030")
+    st.feed(T + "/info/report", {"type": "info", "data": {"project": None, "state": "free", "last_project": {
+        "curr_layer": 49, "filename": "plate_PETG.gcode", "progress": 0, "state": "stoped",
+        "supplies_usage": 57138.4, "task_id": 142454185, "total_layers": 277}}})
+    st.feed(T + "/multiColorBox/report", {"type": "multiColorBox", "data": {"multi_color_box": [
+        {"id": -1, "loaded_slot": -1, "temp": 0, "humidity": 0,
+         "slots": [{"index": 3, "type": "PETG", "color": [239, 240, 241], "status": 5, "consumables_percent": 100}]}]}})
+    s = st.summary("h", "Kobra X")
+    assert s["state"] == "idle (last print stopped)"
+    assert s["last_job"] == {"file": "plate_PETG.gcode", "ended": "stopped", "layer": 49, "total_layers": 277,
+                             "filament_used_mm": 57138, "task_id": "142454185"}
+    box = s["filament"]["boxes"][0]
+    assert box["box"] == -1 and box["slot_in_nozzle"] == "none" and "temperature_c" not in box
+    assert box["slots"] == [{"slot": 4, "material": "PETG", "colour": "#EFF0F1", "remaining_pct": 100, "state": "ready"}]
 
 
 def test_idle_printer_and_unknown_codes():
@@ -194,3 +213,8 @@ def test_printer_host_is_remembered_without_secrets(tmp_path, monkeypatch):
     lan.remember_host("192.168.1.84")
     assert json.loads((tmp_path / "printer.json").read_text()) == {"host": "192.168.1.84"}
     assert lan.resolve_host(None) == "192.168.1.84"
+
+
+def test_request_urls_are_not_logged():
+    import logging
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING

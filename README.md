@@ -86,7 +86,7 @@ Each plate is sliced as its own `.gcode.3mf`. If the slicer can't fit everything
 
 ### Watch the printer (LAN mode)
 
-With LAN mode on (printer screen: Settings > Network > LAN Mode), the agent can see what your printer sees. `printer_status` reports the state, the job's progress and time left, nozzle and bed temperatures against their targets, the filament in each slot of the built-in unit or ACE, and any error code with Anycubic's meaning and a link to the fix. `printer_camera_snapshot` takes a photo with the built-in camera so the agent can look at the bed. Together with the print doctor, that's enough to work out why a print paused and whether it can carry on.
+With LAN mode on (printer screen: Settings > Network > LAN Mode), the agent can see what your printer sees. `printer_status` reports the state, the job's progress and time left, nozzle and bed temperatures against their targets, the filament in each slot and how the last print ended, and any error code with Anycubic's meaning and a link to the fix. `printer_camera_snapshot` takes a photo with the built-in camera so the agent can look at the bed. Together with the print doctor, that's enough to work out why a print paused and whether it can carry on.
 
 `control_print` can pause, resume or stop a print. It previews first and only acts after you confirm in the chat. It can't start prints, heat anything or move the head.
 
