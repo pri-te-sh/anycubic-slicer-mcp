@@ -46,3 +46,19 @@ def test_multicolour_waste_report(slicer, tmp_path):
                                                  filament_colours=["#000000", "#FFFFFF"], output_dir=str(tmp_path)))
     assert r["as_sliced"]["tool_changes"] > 0
     assert r["colour_change_waste_g"] >= 0 and r["model_only_g"] > 0
+
+
+def test_project_plan_and_slice(slicer, tmp_path, monkeypatch):
+    from anycubic_slicer_mcp import project
+    monkeypatch.setenv("ANYCUBIC_MCP_STATE_DIR", str(tmp_path / "state"))
+    d = tmp_path / "kit"
+    d.mkdir()
+    calibration.box(0, 0, 0, 120, 80, 4).save_stl(d / "base.stl")
+    calibration.box(0, 0, 0, 20, 10, 6).save_stl(d / "clip_x4.stl")
+    plan = project.build_plan(slicer, str(d), None, {"answered": ["goal"]})
+    assert not [q for q in plan["questions"] if q["blocking"]]
+    report = project.slice_plan(slicer, plan["plan_id"], None, str(tmp_path / "out"))
+    assert report["totals"]["plates"] == 1 and report["totals"]["filament_g"] > 0
+    plate = report["plates"][0]
+    assert {p["id"]: p["count"] for p in plate["parts"]} == {"base.stl": 1, "clip_x4.stl": 4}
+    assert Path(plate["gcode_3mf"]).exists() and Path(plate["preview"]).exists()

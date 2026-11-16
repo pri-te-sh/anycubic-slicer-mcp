@@ -11,7 +11,7 @@ import anyio
 from mcp.server.fastmcp import FastMCP, Image
 
 from . import __version__
-from . import analysis, calibration, doctor, gcode as gc, materials, optimize, render
+from . import analysis, calibration, doctor, gcode as gc, materials, optimize, project, render
 from .install import find_install, state_dir
 from .inventory import Inventory
 from .mesh import describe, load_mesh, rotation
@@ -29,6 +29,11 @@ Anycubic Slicer Next, headless. Typical flows:
 - Filament from a spool label photo: read the label yourself, then create_filament_profile with what it says.
 - Failed print photos: look at them, match to diagnose_print's issue list, call diagnose_print, re-slice with
   its overrides. Calibration: make_calibration_print. Multi-colour waste: optimize_multicolor.
+- Whole multi-part project (folder or .zip): plan_project → ask the user its `questions` (every blocking one must be
+  answered; ask a few at a time, most important first, and say what you're assuming for the rest) → plan_project
+  again with plan_id and the answers → show the plates and get the user's OK → slice_project. Never answer a
+  question for the user or slice while one is open. If you have your own doubts (which spool, which parts matter
+  most), ask those too.
 Never claim a print is safe without the user checking the preview. This server never sends anything to a printer.
 """
 
@@ -541,6 +546,52 @@ def optimize_multicolor(models: list[str], filaments: list[str], object_filament
         filament_colours=filament_colours, output_dir=output_dir, output_name=output_name or Path(models[0]).stem))
 
 
+# ======================================================================== whole projects
+@mcp.tool()
+@threaded
+def plan_project(path: str | None = None, plan_id: str | None = None, goal: str | None = None,
+                 max_hours_per_plate: float | None = None, separate_supported: bool | None = None,
+                 quantities: dict[str, int] | None = None, exclude: list[str] | None = None,
+                 include: list[str] | None = None, scales: dict[str, float] | None = None,
+                 colours: dict[str, str] | None = None, answered: list[str] | None = None,
+                 printer: str | None = None, process: str | None = None, filaments: list[str] | None = None,
+                 overrides: dict | None = None, spacing_mm: float | None = None) -> dict:
+    """Plan a multi-part project: every model in a folder or .zip (or one model file), each laid in its best
+    orientation, packed onto as few plates as the goal allows. Reads counts from file names (clip_x4.stl) and READMEs.
+    Returns `questions` for anything unclear (duplicate versions, odd scale, parts too big, missing counts, colours,
+    grouping) plus stated `assumptions`. Blocking questions must be put to the user and answered before slicing.
+    Re-plan with plan_id plus answers: quantities={"clip.stl": 4}, exclude=[ids], include=[ids], scales={id: 25.4},
+    colours={id: "red"}, goal="fewest_plates"|"by_colour", max_hours_per_plate=8, separate_supported=true,
+    answered=[question ids the user settled by keeping the default]. Ids are paths relative to the project folder."""
+    if spacing_mm is not None:
+        _bounded("spacing_mm", spacing_mm, 1, 50)
+    if max_hours_per_plate is not None:
+        _bounded("max_hours_per_plate", max_hours_per_plate, 0.25, 200)
+    inputs = {k: v for k, v in dict(goal=goal, max_hours_per_plate=max_hours_per_plate,
+                                    separate_supported=separate_supported, quantities=quantities, exclude=exclude,
+                                    include=include, scales=scales, colours=colours, answered=answered, printer=printer,
+                                    process=process, filaments=filaments, overrides=overrides,
+                                    spacing_mm=spacing_mm).items() if v is not None}
+    return project.summary(project.build_plan(SLICER, path, plan_id, inputs))
+
+
+@mcp.tool()
+@threaded
+def slice_project(plan_id: str, plates: list[int] | None = None, output_dir: str | None = None) -> list:
+    """Slice every plate of an approved plan (or just `plates`). Refuses while the plan has unanswered blocking
+    questions. Each plate becomes its own .gcode and .gcode.3mf; parts that the slicer can't fit are moved to the
+    next plate. Returns real times and weights per plate, totals, and a preview of each plate."""
+    if plates:
+        for n in plates:
+            _bounded("plate", n, 1, 500)
+    report = project.slice_plan(SLICER, plan_id, plates, output_dir)
+    out: list = [json.dumps(report, indent=1)]
+    for r in report["plates"][:6]:
+        if r.get("preview") and Path(r["preview"]).is_file():
+            out.append(Image(data=Path(r["preview"]).read_bytes(), format="png"))
+    return out
+
+
 # ======================================================================== prompts
 @mcp.prompt()
 def setup_check() -> str:
@@ -583,6 +634,17 @@ def multicolor_waste() -> str:
     return ("Ask me which model files use which colours and the spool colours loaded. Call optimize_multicolor and "
             "explain how much filament goes to colour changes, whether any setting helps on my printer, and which "
             "layout changes would cut waste the most.")
+
+
+@mcp.prompt()
+def print_this_project(project_path: str = "") -> str:
+    """Plan and slice a whole multi-part project from a folder or .zip."""
+    return (f"Plan the project at {project_path or '(ask me for the folder or .zip)'} with plan_project. Before anything else, "
+            "go through its questions with me: blocking ones first, at most three at a time, each with the options and "
+            "your suggested default. Also ask me anything else you're unsure about (which goal matters, which spool is "
+            "loaded, whether some parts are optional). Tell me the assumptions you're making. Re-plan with my answers, "
+            "show me the plates (parts, rough time and filament), and only call slice_project once I say go. Afterwards, "
+            "give me the real time and filament per plate and the order to print them in.")
 
 
 def main() -> None:

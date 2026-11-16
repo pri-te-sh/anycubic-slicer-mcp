@@ -159,7 +159,7 @@ def strength_plan(mesh: Mesh, load: str = "general", load_axis: np.ndarray | Non
     shells = {"max_strength": 6, "balanced": 5, "light": 4}[priority]
     density = {"max_strength": 45, "balanced": 25, "light": 15}[priority]
     pattern = "gyroid"
-    reasons = [f"{walls} walls: walls carry most of the load in FDM parts, so they add strength faster than infill."]
+    reasons: list[str] = []
     if load in ("compression",):
         pattern, density = "cubic", density + 10
         reasons.append("Compression: denser cubic infill resists crushing in every direction.")
@@ -171,6 +171,7 @@ def strength_plan(mesh: Mesh, load: str = "general", load_axis: np.ndarray | Non
         reasons.append("Impact: gyroid infill spreads shocks evenly; tougher filament (PETG, ABS, PA) matters more than density.")
     elif load == "tension":
         reasons.append("Tension: keep the pull direction along the layers (in X/Y), never across them.")
+    reasons.insert(0, f"{walls} walls: walls carry most of the load in FDM parts, so they add strength faster than infill.")
     reasons.append(f"{shells} top/bottom layers close the part solidly; {density}% {pattern} infill supports the walls.")
     overrides: dict[str, Any] = {
         "wall_loops": walls, "top_shell_layers": shells, "bottom_shell_layers": shells,

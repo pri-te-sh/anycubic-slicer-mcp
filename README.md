@@ -21,7 +21,7 @@
 
 # Anycubic Slicer MCP
 
-**Anycubic Slicer MCP** is an open-source [Model Context Protocol](https://modelcontextprotocol.io) server for **Anycubic Slicer Next** on Windows and macOS. It lets Claude, Cursor, Codex, Antigravity or any other MCP client slice STL, 3MF, OBJ and STEP files, preview the G-code and plan a print before you commit filament to it.
+**Anycubic Slicer MCP** is an open-source [Model Context Protocol](https://modelcontextprotocol.io) server for **Anycubic Slicer Next** on Windows and macOS. It lets Claude, Cursor, Codex, Antigravity, DeepSeek Harness or any other MCP client slice STL, 3MF, OBJ and STEP files, preview the G-code and plan a print before you commit filament to it.
 
 You can ask for things like:
 
@@ -30,6 +30,7 @@ You can ask for things like:
 - "This print came out stringy and the corners lifted. What should I change?"
 - "This bracket gets bent from the side. Make it stronger and tell me what that costs in time."
 - "How much filament does this two-colour print waste on colour changes?"
+- "Here's a zip of the whole robot kit. Plan the plates, ask me what's unclear, then slice it."
 
 The server drives the slicer's own command line on your computer. It never sends anything to a printer, so you still check the preview and press print yourself.
 
@@ -63,7 +64,22 @@ Tell it how the part is loaded (tension, compression, bending, impact or torsion
 
 ### Multi-colour waste
 
-On a single-nozzle printer every colour change flushes filament. In a two-colour test on a Kobra X, 12.37 g of a 25.07 g print went to colour changes. `optimize_multicolor` measures that waste for your model, tests settings that might reduce it, and recommends one only if every colour is kept and it saves filament. It also suggests layout changes.
+On a single-nozzle printer every colour change flushes filament. In a test on a Kobra X with two 15 mm cubes, one black and one white, 8.31 g of a 9.99 g print went to colour changes. `optimize_multicolor` measures that waste for your model, tests settings that might reduce it, and recommends one only if every colour is kept and it saves filament. It also suggests layout changes.
+
+### Whole projects, with questions first
+
+Point the agent at a folder or a .zip of parts. `plan_project` finds every model and reads counts from names like `clip_x4.stl` and from a README. It lays each part in its best orientation and packs the parts onto plates. You can group for the fewest plates or by colour, cap each plate at a number of hours, and keep parts that need supports together.
+
+It doesn't guess when the files are unclear. It returns questions for the agent to put to you, and the blocking ones must be answered before `slice_project` will run:
+
+- two versions of the same part (`lid_v1`, `lid_v2`): which to print?
+- a part only a few millimetres across: exported in inches or cm?
+- a part bigger than the bed: scale it or skip it?
+- parts with no count anywhere: one of each?
+- files that look like test pieces: leave them out?
+- broken meshes, colour groups, and whether supported parts get their own plates
+
+Each plate is sliced as its own `.gcode.3mf`. If the slicer can't fit everything on a plate, the extras move to the next one. In a test with an 11-file kit, three questions settled it and the result was one plate of 14 pieces: 2h 32m 23s and 71.62 g.
 
 ### Calibration prints
 
@@ -103,6 +119,7 @@ Set up the Anycubic Slicer MCP server (https://github.com/pri-te-sh/anycubic-sli
 5. Register it as a stdio MCP server named "anycubic-slicer" in the app you are running in. It needs no arguments or environment variables.
    - Claude Code: claude mcp add anycubic-slicer --scope user -- anycubic-slicer-mcp
    - Codex: codex mcp add anycubic-slicer -- anycubic-slicer-mcp
+   - DeepSeek Harness: add an insert entry for the @deepseek-ai/dsh-mcp-client plugin (serverName anycubic-slicer, transport stdio, command anycubic-slicer-mcp) to ~/.dsh/profiles/<profile>/cordis.patch.yml.
    - Cursor, Claude Desktop, Antigravity and others: add {"mcpServers": {"anycubic-slicer": {"command": "<full path from step 4>"}}} to the app's MCP config, keeping any servers already there.
 6. Tell me if the app needs a restart to load the server. Once it's loaded, call the slicer_status tool and tell me which printer, process and filament it found.
 
@@ -121,6 +138,18 @@ claude mcp add anycubic-slicer --scope user -- anycubic-slicer-mcp
 
 ```bash
 codex mcp add anycubic-slicer -- anycubic-slicer-mcp
+```
+
+**DeepSeek Harness**: put this in `~/.dsh/profiles/desktop/cordis.patch.yml` (or your profile's folder), replacing the `[]` that's there, then restart Harness. It uses Harness's built-in `@deepseek-ai/dsh-mcp-client` plugin.
+
+```yaml
+- insert:
+    - id: mcp-anycubic-slicer
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: anycubic-slicer
+        transport: stdio
+        command: anycubic-slicer-mcp
 ```
 
 **Cursor** (`~/.cursor/mcp.json`), **Claude Desktop** (`claude_desktop_config.json`), **Antigravity** and most other clients:
@@ -176,11 +205,13 @@ uv tool uninstall anycubic-slicer-mcp
 | | `estimate_cost` | Filament, electricity and extras |
 | Filament | `create_filament_profile` | Filament preset from a spool label |
 | | `add_spool` / `list_spools` / `update_spool` | Local spool inventory |
+| Whole projects | `plan_project` | Plates for every part in a folder or .zip, plus the questions to ask you first |
+| | `slice_project` | Slices an approved plan, one `.gcode.3mf` per plate |
 | Fix and tune | `diagnose_print` | Causes and setting changes for print defects |
 | | `make_calibration_print` | Temperature tower, flow, retraction or first-layer test, sliced |
 | | `optimize_multicolor` | Measures and reduces colour-change waste |
 
-It also ships five prompts that walk the agent through common jobs: `setup_check`, `filament_from_label`, `diagnose_from_photos`, `make_it_stronger` and `multicolor_waste`.
+It also ships six prompts that walk the agent through common jobs: `setup_check`, `filament_from_label`, `diagnose_from_photos`, `make_it_stronger`, `multicolor_waste` and `print_this_project`.
 
 ## Safety
 
@@ -198,7 +229,7 @@ Nothing is needed for a standard install. These environment variables cover the 
 |---|---|
 | `ANYCUBIC_SLICER_EXE` | Path to the slicer program if it isn't in the default place |
 | `ANYCUBIC_SLICER_DATA` | Path to the slicer's data folder |
-| `ANYCUBIC_MCP_STATE_DIR` | Where the spool inventory is kept |
+| `ANYCUBIC_MCP_STATE_DIR` | Where the spool inventory, project plans and unpacked zips are kept |
 | `ANYCUBIC_MCP_ALLOW_GCODE_TEMPLATES` | `1` allows overriding G-code template settings |
 | `ANYCUBIC_MCP_ALLOW_NETWORK_PATHS` | `1` allows UNC network paths on Windows |
 

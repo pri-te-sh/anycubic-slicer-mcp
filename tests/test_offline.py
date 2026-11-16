@@ -321,3 +321,11 @@ def test_choose_and_configs(lib, fake_install):
     assert cfg["process"]["compatible_printers"] == [PRINTER]
     with pytest.raises(ValueError):
         s.configs(chosen, None, bed_type="lava plate")
+
+
+def test_strength_reason_matches_wall_count():
+    from anycubic_slicer_mcp import analysis, calibration
+    plan = analysis.strength_plan(calibration.box(0, 0, 0, 40, 10, 4), load="bending", load_axis=None,
+                                  priority="balanced", material="PLA", nozzle_mm=0.4, bed=(250, 250, 250))
+    walls = plan["overrides"]["wall_loops"]
+    assert plan["why"][0].startswith(f"{walls} walls")
