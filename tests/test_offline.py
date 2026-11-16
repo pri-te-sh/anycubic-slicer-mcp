@@ -329,3 +329,17 @@ def test_strength_reason_matches_wall_count():
                                   priority="balanced", material="PLA", nozzle_mm=0.4, bed=(250, 250, 250))
     walls = plan["overrides"]["wall_loops"]
     assert plan["why"][0].startswith(f"{walls} walls")
+
+
+def test_every_tool_is_documented():
+    """Directories score tool definitions; keep every tool annotated and every parameter described."""
+    import asyncio
+    from anycubic_slicer_mcp import server
+    tools = asyncio.run(server.mcp.list_tools())
+    assert len(tools) >= 25
+    for t in tools:
+        assert t.annotations and t.annotations.title, t.name
+        assert t.annotations.openWorldHint is False, t.name
+        assert t.description and len(t.description) > 80, t.name
+        for key, prop in t.inputSchema.get("properties", {}).items():
+            assert prop.get("description"), f"{t.name}.{key}"

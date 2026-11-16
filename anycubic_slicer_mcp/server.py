@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Any
 
 import anyio
+from typing import Annotated
+
 from mcp.server.fastmcp import FastMCP, Image
+from mcp.types import ToolAnnotations
+from pydantic import Field
 
 from . import __version__
 from . import analysis, calibration, doctor, gcode as gc, materials, optimize, project, render
@@ -42,6 +46,21 @@ INSTALL = find_install()
 LIB = PresetLibrary(INSTALL)
 SLICER = Slicer(INSTALL, LIB)
 INVENTORY = Inventory()
+
+
+def _ann(title: str, read_only: bool = False, destructive: bool = False, idempotent: bool = True) -> ToolAnnotations:
+    """MCP behaviour hints. Nothing here reaches outside this computer, so openWorldHint is always false."""
+    return ToolAnnotations(title=title, readOnlyHint=read_only, destructiveHint=False if read_only else destructive,
+                           idempotentHint=True if read_only else idempotent, openWorldHint=False)
+
+
+# Parameter types shared by several tools; the descriptions end up in each tool's input schema.
+Printer = Annotated[str | None, Field(description="Printer preset name or a unique part of it, e.g. 'Kobra X'. Omit to use the printer selected in the slicer window.")]
+Process = Annotated[str | None, Field(description="Process preset (layer height, speeds), e.g. '0.20mm Standard'. Omit to use the slicer window's selection.")]
+Filaments = Annotated[list[str] | None, Field(description="Filament preset names, one per filament slot, e.g. ['Anycubic PLA']. Omit to use the slicer window's selection.")]
+ModelPath = Annotated[str, Field(description="Path to an STL, OBJ, 3MF or STEP file on this computer.")]
+GcodePath = Annotated[str, Field(description="Path to a .gcode file on this computer, e.g. one written by slice_model.")]
+OutputDir = Annotated[str | None, Field(description="Folder for the output files. Default: next to the first model.")]
 
 
 def threaded(fn):
@@ -85,11 +104,15 @@ def _model_mesh(path: str):
 
 
 # ======================================================================== status & presets
-@mcp.tool()
+@mcp.tool(title="Slicer status", annotations=_ann("Slicer status", read_only=True))
 @threaded
 def slicer_status() -> dict:
-    """Is Anycubic Slicer Next installed, which version, and what printer/process/filament does its GUI have
-    selected? Call this first."""
+    """Report whether Anycubic Slicer Next is installed and what its window currently has selected.
+
+    Call this first in a session, and whenever a slice fails with "not found": it returns the server version,
+    operating system, slicer executable and version, data folder, how many printer/process/filament presets
+    exist, the selected printer, process, filaments and plate type, and the build volume. Read-only; it only
+    reads the slicer's config files and starts nothing."""
     LIB.reload()
     conf_app = LIB.conf.get("app") if isinstance(LIB.conf.get("app"), dict) else {}
     sel = LIB.selection()
@@ -107,24 +130,39 @@ def slicer_status() -> dict:
     }
 
 
-@mcp.tool()
+@mcp.tool(title="List presets", annotations=_ann("List presets", read_only=True))
 @threaded
-def list_presets(kind: str, printer: str | None = None, search: str | None = None,
-                 include_incompatible: bool = False) -> dict:
-    """List presets. kind: machine (printers) | process | filament. With printer, only process/filament
-    presets made for it are listed (your own presets first). search filters names (e.g. 'PETG', '0.16mm')."""
+def list_presets(
+    kind: Annotated[str, Field(description="Which presets: 'machine' (printers), 'process' (layer height, speeds) or 'filament'.")],
+    printer: Printer = None,
+    search: Annotated[str | None, Field(description="Case-insensitive part of the name to filter by, e.g. 'PETG' or '0.16mm'.")] = None,
+    include_incompatible: Annotated[bool, Field(description="Also list process/filament presets made for other printers, marked fits_printer=false.")] = False,
+) -> dict:
+    """List preset names so you can pass exact ones to slice_model, compare_slices or get_preset.
+
+    Use this to discover names; use get_preset to read the settings inside one preset. With a printer, only
+    process and filament presets made for that printer are listed, the user's own presets first. Returns
+    {count, presets: [{name, source}], truncated} with at most 300 rows. Read-only."""
     LIB.reload()
     p = _printer(printer) if printer else None
     rows = LIB.listing(kind, p, search, include_incompatible)
     return {"count": len(rows), "presets": rows[:300], "truncated": len(rows) > 300}
 
 
-@mcp.tool()
+@mcp.tool(title="Read a preset's settings", annotations=_ann("Read a preset's settings", read_only=True))
 @threaded
-def get_preset(name: str, kind: str, search: str | None = None, keys: list[str] | None = None,
-               printer: str | None = None) -> dict:
-    """Resolved settings of a preset (inheritance merged). Use search to find setting names by substring
-    (e.g. 'infill', 'support', 'temp', 'retract'); keys returns exact ones. Long G-code templates are elided."""
+def get_preset(
+    name: Annotated[str, Field(description="Preset name, or a unique part of it, e.g. 'Anycubic PLA'.")],
+    kind: Annotated[str, Field(description="'machine', 'process' or 'filament'.")],
+    search: Annotated[str | None, Field(description="Only return settings whose key contains this text, e.g. 'infill', 'support', 'temp', 'retract'.")] = None,
+    keys: Annotated[list[str] | None, Field(description="Exact setting keys to return in full, including long G-code templates.")] = None,
+    printer: Printer = None,
+) -> dict:
+    """Read the effective settings of one preset, with its inheritance chain merged.
+
+    Use it to find the exact setting names to pass as overrides to slice_model, compare_slices or
+    save_user_preset (search='infill' finds sparse_infill_density and friends). Values longer than 200
+    characters are elided unless you ask for them by keys. Returns {preset, source, inherits, settings}. Read-only."""
     LIB.reload()
     preset = LIB.get(kind, name, _printer(printer) if printer else None)
     cfg = LIB.resolve(preset.kind, preset.name)
@@ -136,12 +174,22 @@ def get_preset(name: str, kind: str, search: str | None = None, keys: list[str] 
     return {"preset": preset.name, "source": preset.source, "inherits": preset.parent, "settings": trimmed}
 
 
-@mcp.tool()
+@mcp.tool(title="Save a user preset", annotations=_ann("Save a user preset", destructive=True))
 @threaded
-def save_user_preset(kind: str, name: str, inherits: str, settings: dict, printer: str | None = None,
-                     overwrite: bool = False) -> dict:
-    """Save your own process/filament/printer preset that appears in the slicer GUI (restart the GUI to see it).
-    inherits: the preset to start from; settings: only the values that differ. Ask the user before saving."""
+def save_user_preset(
+    kind: Annotated[str, Field(description="'process', 'filament' or 'machine'.")],
+    name: Annotated[str, Field(description="Name for the new preset as it will appear in the slicer, 1-120 characters, no <>:\"/\\|?*;")],
+    inherits: Annotated[str, Field(description="Existing preset to start from; the new preset stores only what differs.")],
+    settings: Annotated[dict, Field(description="Setting key to value, only the values that differ, e.g. {'wall_loops': 3}. Find keys with get_preset.")],
+    printer: Annotated[str | None, Field(description="Limit the new process/filament preset to this printer. Omit to keep the parent's printers.")] = None,
+    overwrite: Annotated[bool, Field(description="Replace an existing user preset with the same name. Default false refuses.")] = False,
+) -> dict:
+    """Write a new process, filament or printer preset into the user's Anycubic Slicer Next presets.
+
+    Use it when the user wants settings kept for future prints; for a one-off print pass overrides to slice_model
+    instead, and for fixing a failed print use diagnose_print first (which only suggests changes and saves
+    nothing). Writes one JSON file to the slicer's user preset folder; with overwrite=true it replaces an existing
+    one. Ask the user before calling. The slicer window shows it after a restart. Returns {saved, kind, inherits}."""
     LIB.reload()
     parent = LIB.get(kind, inherits)
     if not re.fullmatch(r"[^<>:\"/\\|?*;\x00-\x1f]{1,120}", name):
@@ -174,11 +222,15 @@ def save_user_preset(kind: str, name: str, inherits: str, settings: dict, printe
 
 
 # ======================================================================== models & slicing
-@mcp.tool()
+@mcp.tool(title="Model info", annotations=_ann("Model info", read_only=True))
 @threaded
-def model_info(path: str, printer: str | None = None) -> dict:
-    """Size, volume, surface area, triangle count, pieces and watertight check of an STL/OBJ/3MF/STEP model,
-    plus whether it fits the printer's build volume."""
+def model_info(path: ModelPath, printer: Printer = None) -> dict:
+    """Measure a 3D model before slicing: size, volume, surface area, triangles, separate pieces, watertightness
+    and whether it fits the printer's build volume.
+
+    Use it first on an unfamiliar file. For which way up to print it use find_best_orientation, and to test a
+    rotation or scale against the bed use check_bed_fit. STEP files are converted with the slicer first.
+    Read-only; it never changes the file."""
     mesh = _model_mesh(path)
     info = describe(mesh)
     try:
@@ -190,22 +242,34 @@ def model_info(path: str, printer: str | None = None) -> dict:
     return info
 
 
-@mcp.tool()
+@mcp.tool(title="Slice a model", annotations=_ann("Slice a model"))
 @threaded
-def slice_model(models: list[str], printer: str | None = None, process: str | None = None,
-                filaments: list[str] | None = None, overrides: dict | None = None,
-                output_dir: str | None = None, output_name: str | None = None, plate: int = 0,
-                arrange: bool = True, orient: bool = False, rotation_deg: dict | None = None,
-                scale: float | None = None, copies: int = 1, object_filaments: list[int] | None = None,
-                filament_colours: list[str] | None = None, bed_type: str | None = None,
-                timeout_s: int = 900) -> dict:
-    """Slice STL/3MF/OBJ/STEP files to G-code plus a printer-ready .gcode.3mf.
-    printer/process/filaments: preset names or unique parts of them (omitted → the GUI's selection).
-    overrides: setting → value, routed to the right preset (find names with get_preset search).
-    rotation_deg: {"x":..,"y":..,"z":..} degrees (use find_best_orientation's suggestion); scale: factor.
-    copies: instances of each model. Multi-colour: filaments=[...], object_filaments=[1,2,...] (filament per model),
-    filament_colours=["#RRGGBB", ...] matching the loaded spools. bed_type e.g. "Textured PEI Plate".
-    Returns time, grams, cost, layers, per-filament use and warnings. Output goes next to the first model."""
+def slice_model(
+    models: Annotated[list[str], Field(description="Paths to STL, 3MF, OBJ or STEP files, all placed on one plate.")],
+    printer: Printer = None,
+    process: Process = None,
+    filaments: Filaments = None,
+    overrides: Annotated[dict | None, Field(description="Setting key to value for this slice only, e.g. {'sparse_infill_density': '20%', 'wall_loops': 3, 'enable_support': true}. Keys come from get_preset.")] = None,
+    output_dir: OutputDir = None,
+    output_name: Annotated[str | None, Field(description="Base name for the output files. Default: the first model's name.")] = None,
+    plate: Annotated[int, Field(description="Which plate of a multi-plate 3MF to slice; 0 slices all plates.")] = 0,
+    arrange: Annotated[bool, Field(description="Let the slicer arrange parts on the plate. Turn off to keep 3MF positions.")] = True,
+    orient: Annotated[bool, Field(description="Let the slicer auto-orient parts. Prefer find_best_orientation plus rotation_deg.")] = False,
+    rotation_deg: Annotated[dict | None, Field(description="Rotation in degrees applied before slicing, e.g. {'x': 90, 'y': 0, 'z': 0}.")] = None,
+    scale: Annotated[float | None, Field(description="Uniform scale factor, e.g. 25.4 for a model exported in inches. 0.01 to 100.")] = None,
+    copies: Annotated[int, Field(description="Copies of each model on the plate, 1 to 200.")] = 1,
+    object_filaments: Annotated[list[int] | None, Field(description="Multi-colour: filament slot (1-based) for each model, in order, e.g. [1, 2].")] = None,
+    filament_colours: Annotated[list[str] | None, Field(description="Multi-colour: '#RRGGBB' for each filament slot, matching the loaded spools.")] = None,
+    bed_type: Annotated[str | None, Field(description="Plate type, e.g. 'Textured PEI Plate', 'Smooth PEI Plate', 'Cool Plate'. Default: the selected plate.")] = None,
+    timeout_s: Annotated[int, Field(description="Give up after this many seconds, 30 to 7200.")] = 900,
+) -> dict:
+    """Slice 3D models into printer-ready G-code with Anycubic Slicer Next, running locally.
+
+    The main tool for a single plate. For several variants of one model use compare_slices; for a whole folder
+    of parts use plan_project and slice_project. Writes <name>.gcode and <name>.gcode.3mf (send the .gcode.3mf to
+    the printer) to output_dir, replacing files of the same name; takes seconds to a few minutes. Returns print
+    time, grams, cost, layers, per-filament use, the output paths and slicer warnings, which flag overrides the
+    slicer clamped or ignored. It never sends anything to a printer."""
     _bounded("plate", plate, 0, 99); _bounded("copies", copies, 1, 200); _bounded("timeout_s", timeout_s, 30, 7200)
     return SLICER.slice(SliceRequest(
         models=models, printer=printer, process=process, filaments=filaments, overrides=overrides,
@@ -214,23 +278,34 @@ def slice_model(models: list[str], printer: str | None = None, process: str | No
         filament_colours=filament_colours, bed_type=bed_type, timeout_s=timeout_s))
 
 
-@mcp.tool()
+@mcp.tool(title="G-code summary", annotations=_ann("G-code summary", read_only=True))
 @threaded
-def gcode_summary(path: str) -> dict:
-    """Print time, filament (g, m, cost), layers, first-layer time, colour changes, key settings and the
-    length of each extrusion type, read from an existing .gcode file."""
+def gcode_summary(path: GcodePath) -> dict:
+    """Read the numbers out of an existing .gcode file: print time, filament grams, metres and cost, layers,
+    first-layer time, colour changes, key settings and metres extruded per feature type.
+
+    Use it on G-code you already have (from slice_model or another slicer); slice_model already returns these for
+    new slices. Read-only."""
     p = checked_file(path, gc.GCODE_SUFFIXES)
     s = gc.summarize(p)
     s["extrusion_m_by_type"] = gc.read_toolpaths(p).feature_lengths()
     return s
 
 
-@mcp.tool()
+@mcp.tool(title="Preview G-code", annotations=_ann("Preview G-code", read_only=True))
 @threaded
-def preview_gcode(path: str, layer: int | None = None, view: str = "top", size: int = 900) -> list:
-    """Render G-code as an image. view="top": layer=None shows every layer shaded by height (placement check);
-    layer=N shows that layer coloured by feature (walls orange/yellow, infill red, top pink, bottom blue,
-    bridges cyan, support teal). view="side": front elevation of the whole print (overhangs, supports)."""
+def preview_gcode(
+    path: GcodePath,
+    layer: Annotated[int | None, Field(description="1-based layer to draw coloured by feature. Omit to draw every layer shaded by height.")] = None,
+    view: Annotated[str, Field(description="'top' (from above) or 'side' (front elevation of the whole print).")] = "top",
+    size: Annotated[int, Field(description="Image size in pixels, 200 to 2000.")] = 900,
+) -> list:
+    """Draw G-code toolpaths as a PNG so you and the user can check a slice before printing.
+
+    view='top' without a layer shows placement on the bed; with a layer it colours walls orange/yellow, infill
+    red, top surfaces pink, bottom blue, bridges cyan and support teal. view='side' shows overhangs and support.
+    For a build-up animation use animate_layers; for a shareable summary use print_card. Read-only: returns the
+    image and layer metadata without writing files."""
     _bounded("size", size, 200, 2000)
     p = checked_file(path, gc.GCODE_SUFFIXES)
     tp = gc.read_toolpaths(p)
@@ -243,10 +318,17 @@ def preview_gcode(path: str, layer: int | None = None, view: str = "top", size: 
     return [Image(data=png, format="png"), json.dumps(meta)]
 
 
-@mcp.tool()
+@mcp.tool(title="Animate layers", annotations=_ann("Animate layers"))
 @threaded
-def animate_layers(path: str, size: int = 520, max_frames: int = 60) -> list:
-    """Animated GIF of the print building up layer by layer. Saved next to the G-code; returns its path and the GIF."""
+def animate_layers(
+    path: GcodePath,
+    size: Annotated[int, Field(description="Frame size in pixels, 200 to 1000.")] = 520,
+    max_frames: Annotated[int, Field(description="Most frames in the GIF, 5 to 200; layers are skipped evenly to fit.")] = 60,
+) -> list:
+    """Make an animated GIF of the print building up layer by layer.
+
+    Use it when the user wants to watch the build or share it; for checking one layer use preview_gcode instead.
+    Writes <name>_layers.gif next to the G-code, replacing an older one. Returns the GIF and its path."""
     _bounded("size", size, 200, 1000); _bounded("max_frames", max_frames, 5, 200)
     p = checked_file(path, gc.GCODE_SUFFIXES)
     out = p.with_name(p.stem.replace(".gcode", "") + "_layers.gif")
@@ -254,12 +336,19 @@ def animate_layers(path: str, size: int = 520, max_frames: int = 60) -> list:
     return [Image(data=out.read_bytes(), format="gif"), json.dumps({"gif": str(out)})]
 
 
-@mcp.tool()
+@mcp.tool(title="Print card", annotations=_ann("Print card"))
 @threaded
-def print_card(path: str, title: str | None = None, price_per_kg: float | None = None,
-               currency_symbol: str = "$") -> list:
-    """A shareable 1200x630 image summarising a sliced print: preview, time, filament, cost, layers, settings.
-    Saved next to the G-code."""
+def print_card(
+    path: GcodePath,
+    title: Annotated[str | None, Field(description="Heading on the card. Default: the G-code file name.")] = None,
+    price_per_kg: Annotated[float | None, Field(description="Filament price per kg for the cost line. Default: the cost stored in the G-code.")] = None,
+    currency_symbol: Annotated[str, Field(description="Symbol shown before the cost, e.g. '$' or '€'.")] = "$",
+) -> list:
+    """Make a 1200x630 PNG summary card of a sliced print: toolpath preview, time, filament, cost, layers, infill,
+    walls and printer.
+
+    Use it to share or quote a print; for inspecting toolpaths use preview_gcode. Writes <name>_card.png next to
+    the G-code, replacing an older one. Returns the image and its path."""
     p = checked_file(path, gc.GCODE_SUFFIXES)
     s = gc.summarize(p)
     tp = gc.read_toolpaths(p)
@@ -281,10 +370,16 @@ def print_card(path: str, title: str | None = None, price_per_kg: float | None =
     return [Image(data=out.read_bytes(), format="png"), json.dumps({"card": str(out)})]
 
 
-@mcp.tool()
+@mcp.tool(title="Open in slicer", annotations=_ann("Open in slicer", idempotent=False))
 @threaded
-def open_in_slicer(path: str) -> str:
-    """Open a model, project or G-code in the Anycubic Slicer Next window. Only call this when the user asks."""
+def open_in_slicer(
+    path: Annotated[str, Field(description="A model (STL, OBJ, 3MF, STEP), a .gcode or a .gcode.3mf on this computer.")],
+) -> str:
+    """Open a file in the Anycubic Slicer Next window on the user's screen.
+
+    Only call it when the user asks to see or edit something in the slicer; every other tool works without the
+    window. 3MF files are checked for post-processing scripts first and refused if they have one. Changes no
+    files."""
     p = checked_file(path, MODEL_SUFFIXES | gc.GCODE_SUFFIXES | {".gcode.3mf"})
     if p.suffix.lower() == ".3mf":
         from .slicer import scan_3mf
@@ -294,28 +389,43 @@ def open_in_slicer(path: str) -> str:
 
 
 # ======================================================================== planning
-@mcp.tool()
+@mcp.tool(title="Compare slices", annotations=_ann("Compare slices"))
 @threaded
-def compare_slices(models: list[str], variants: list[dict], printer: str | None = None,
-                   process: str | None = None, filaments: list[str] | None = None,
-                   output_dir: str | None = None, output_name: str | None = None) -> dict:
-    """Slice the same model several ways and compare time, filament and cost side by side.
-    variants: up to 8 of {"label": "...", "overrides": {...}, "process": "...", "filaments": [...],
-    "rotation": {...}, "scale": 1.0}. The first variant is the reference."""
+def compare_slices(
+    models: Annotated[list[str], Field(description="Model paths sliced the same way in every variant.")],
+    variants: Annotated[list[dict], Field(description="Up to 8 variants, each {'label': str, 'overrides': {...}, 'process': str, 'filaments': [...], 'rotation': {...}, 'scale': float}; all keys optional except label. The first is the reference.")],
+    printer: Printer = None,
+    process: Process = None,
+    filaments: Filaments = None,
+    output_dir: OutputDir = None,
+    output_name: Annotated[str | None, Field(description="Base name for the output files. Default: the first model's name.")] = None,
+) -> dict:
+    """Slice the same model several ways and compare print time, filament and cost side by side.
+
+    Use it to show the price of a choice (stronger settings, finer layers, another orientation) before
+    committing; for a single slice use slice_model. Runs the slicer once per variant, so it takes longer, and
+    writes each variant's G-code to output_dir. Returns each variant's numbers, the change against the first,
+    and the fastest and lightest variant."""
     base = SliceRequest(models=models, printer=printer, process=process, filaments=filaments,
                         output_dir=output_dir, output_name=output_name or Path(models[0]).stem)
     return optimize.compare(SLICER, base, variants)
 
 
-@mcp.tool()
+@mcp.tool(title="Find the best orientation", annotations=_ann("Find the best orientation", read_only=True))
 @threaded
-def find_best_orientation(model: str, goal: str = "balanced", printer: str | None = None,
-                          load_axis: str | list[float] | None = None, support_angle: float = 45.0,
-                          top: int = 5) -> dict:
-    """Rank ways to lay the model on the bed. goal: balanced | least_support | fastest | strongest |
-    best_bed_adhesion. load_axis ('x','y','z' or a vector, in model coordinates) is the direction the part will
-    be pulled or pushed in use; strong orientations keep it along the layers. Pass the winner's `rotation`
-    to slice_model as rotation_deg."""
+def find_best_orientation(
+    model: ModelPath,
+    goal: Annotated[str, Field(description="'balanced', 'least_support', 'fastest', 'strongest' or 'best_bed_adhesion'.")] = "balanced",
+    printer: Printer = None,
+    load_axis: Annotated[str | list[float] | None, Field(description="Direction the part is pushed or pulled in use, in model coordinates: 'x', 'y', 'z' or [x, y, z]. Used by goal='strongest'.")] = None,
+    support_angle: Annotated[float, Field(description="Overhang angle in degrees from vertical that needs support, 10 to 80.")] = 45.0,
+    top: Annotated[int, Field(description="How many ranked orientations to return, 1 to 12.")] = 5,
+) -> dict:
+    """Rank the ways a model can lie on the bed by support area, height, bed contact, weak layers and fit.
+
+    Use it before slicing a part whose orientation isn't obvious; pass the winner's rotation to slice_model as
+    rotation_deg. For load-bearing parts, analyze_strength also recommends walls and infill. Works on the mesh
+    alone without running the slicer. Read-only."""
     _bounded("support_angle", support_angle, 10, 80); _bounded("top", top, 1, 12)
     mesh = _model_mesh(model)
     bed = _bed(_printer(printer))
@@ -324,13 +434,22 @@ def find_best_orientation(model: str, goal: str = "balanced", printer: str | Non
             "use": "slice_model(..., rotation_deg=ranked[0].rotation)"}
 
 
-@mcp.tool()
+@mcp.tool(title="Analyze strength", annotations=_ann("Analyze strength", read_only=True))
 @threaded
-def analyze_strength(model: str, load: str = "general", load_axis: str | list[float] | None = None,
-                     priority: str = "balanced", printer: str | None = None, filament: str | None = None) -> dict:
-    """Analyse the part's shape and recommend orientation + settings for strength.
-    load: general | tension | compression | bending | impact | torsion. load_axis: direction of the load in model
-    coordinates ('x','y','z'). priority: max_strength | balanced | light. Returns overrides and rotation to slice with."""
+def analyze_strength(
+    model: ModelPath,
+    load: Annotated[str, Field(description="How the part is loaded: 'general', 'tension', 'compression', 'bending', 'impact' or 'torsion'.")] = "general",
+    load_axis: Annotated[str | list[float] | None, Field(description="Direction of the load in model coordinates: 'x', 'y', 'z' or [x, y, z]. For a gear pushed at its teeth, use an axis in the gear's plane.")] = None,
+    priority: Annotated[str, Field(description="'max_strength', 'balanced' or 'light' (less filament).")] = "balanced",
+    printer: Printer = None,
+    filament: Annotated[str | None, Field(description="Filament preset, used for material-specific advice. Default: the selected filament.")] = None,
+) -> dict:
+    """Recommend an orientation and slicer settings (walls, top/bottom layers, infill, layer height) that make a
+    part strong for how it will be used.
+
+    Use it when the user says a part must hold, bend or survive impact; find_best_orientation only ranks
+    orientations. Also flags thin waists in the shape. Returns overrides and a rotation to pass to slice_model,
+    with reasons; check the cost with compare_slices. Read-only."""
     mesh = _model_mesh(model)
     p = _printer(printer)
     mach = LIB.resolve("machine", p)
@@ -348,25 +467,40 @@ def analyze_strength(model: str, load: str = "general", load_axis: str | list[fl
     return plan
 
 
-@mcp.tool()
+@mcp.tool(title="Check bed fit", annotations=_ann("Check bed fit", read_only=True))
 @threaded
-def check_bed_fit(model: str, printer: str | None = None, rotation_deg: dict | None = None,
-                  scale: float | None = None) -> dict:
-    """Does the model fit the printer's build volume (optionally after rotating/scaling)? If not, suggests a
-    45° turn, a scale factor, lying it down, or splitting."""
+def check_bed_fit(
+    model: ModelPath,
+    printer: Printer = None,
+    rotation_deg: Annotated[dict | None, Field(description="Rotation to test first, e.g. {'z': 45}.")] = None,
+    scale: Annotated[float | None, Field(description="Scale factor to test first, e.g. 0.8.")] = None,
+) -> dict:
+    """Check whether a model fits the printer's build volume, optionally after a rotation or scale.
+
+    If it doesn't fit it suggests a 45-degree turn, a scale percentage, laying it down, or splitting it in CAD.
+    model_info gives the same fit check without trying transforms. Read-only."""
     mesh = _model_mesh(model)
     r = rotation_deg or {}
     m = rotation(r.get("x", 0), r.get("y", 0), r.get("z", 0)) * (scale or 1.0)
     return analysis.fit_report(mesh.transformed(m).on_bed(), _bed(_printer(printer)))
 
 
-@mcp.tool()
+@mcp.tool(title="Estimate cost", annotations=_ann("Estimate cost", read_only=True))
 @threaded
-def estimate_cost(gcode: str | None = None, grams: float | None = None, print_time_s: float | None = None,
-                  price_per_kg: float | None = None, printer_power_w: float = 150, electricity_per_kwh: float = 0.15,
-                  extra: float = 0.0, currency: str = "USD") -> dict:
-    """Cost of a print: filament + electricity (+ extra, e.g. labour or markup). Give a .gcode file, or grams
-    and print_time_s. price_per_kg defaults to the filament preset's cost; printer_power_w is the average draw."""
+def estimate_cost(
+    gcode: Annotated[str | None, Field(description="Path to a sliced .gcode; supplies grams, time and filament price. Or give grams and print_time_s.")] = None,
+    grams: Annotated[float | None, Field(description="Filament used in grams, when no gcode is given.")] = None,
+    print_time_s: Annotated[float | None, Field(description="Print time in seconds, when no gcode is given.")] = None,
+    price_per_kg: Annotated[float | None, Field(description="Filament price per kg. Default: the price stored in the G-code.")] = None,
+    printer_power_w: Annotated[float, Field(description="Average printer power draw in watts.")] = 150,
+    electricity_per_kwh: Annotated[float, Field(description="Electricity price per kWh.")] = 0.15,
+    extra: Annotated[float, Field(description="Fixed amount added, e.g. labour or markup.")] = 0.0,
+    currency: Annotated[str, Field(description="Currency label for the result, e.g. 'USD'.")] = "USD",
+) -> dict:
+    """Work out what a print costs: filament plus electricity plus any extra such as labour or markup.
+
+    Use it for quotes or when the user asks what something costs; compare_slices already reports filament cost
+    per variant. Returns each part of the cost and the total. Read-only; pure arithmetic."""
     if gcode:
         s = gc.summarize(checked_file(gcode, gc.GCODE_SUFFIXES))
         grams = s.get("total_filament_g")
@@ -382,20 +516,38 @@ def estimate_cost(gcode: str | None = None, grams: float | None = None, print_ti
 
 
 # ======================================================================== filament & spools
-@mcp.tool()
+@mcp.tool(title="Create filament profile", annotations=_ann("Create filament profile", destructive=True))
 @threaded
-def create_filament_profile(material: str, printer: str | None = None, brand: str | None = None,
-                            product: str | None = None, colour_name: str | None = None, colour_hex: str | None = None,
-                            nozzle_min: float | None = None, nozzle_max: float | None = None,
-                            nozzle_recommended: float | None = None, bed_min: float | None = None,
-                            bed_max: float | None = None, diameter_mm: float | None = None,
-                            weight_g: float | None = None, price: float | None = None, density: float | None = None,
-                            max_speed_mm_s: float | None = None, drying: str | None = None, name: str | None = None,
-                            save: bool = False, overwrite: bool = False, add_to_inventory: bool = False) -> dict:
-    """Turn a spool label into a filament preset. Read the label photo yourself and pass what it says
-    (material is required; anything missing uses typical values for that material). The profile inherits from
-    the closest existing preset for the printer. With save=False (default) it's a preview: show the user, then
-    call again with save=True. add_to_inventory also records the spool."""
+def create_filament_profile(
+    material: Annotated[str, Field(description="Material printed on the label, e.g. 'PLA', 'PETG', 'PLA+', 'ABS', 'TPU', 'PA-CF'.")],
+    printer: Printer = None,
+    brand: Annotated[str | None, Field(description="Brand on the label.")] = None,
+    product: Annotated[str | None, Field(description="Product line on the label, e.g. 'Silk' or 'Matte'.")] = None,
+    colour_name: Annotated[str | None, Field(description="Colour name on the label, e.g. 'Galaxy Black'.")] = None,
+    colour_hex: Annotated[str | None, Field(description="Colour as '#RRGGBB', estimated from the photo if the label has none.")] = None,
+    nozzle_min: Annotated[float | None, Field(description="Lowest nozzle temperature on the label, °C.")] = None,
+    nozzle_max: Annotated[float | None, Field(description="Highest nozzle temperature on the label, °C.")] = None,
+    nozzle_recommended: Annotated[float | None, Field(description="Recommended nozzle temperature if the label gives one, °C.")] = None,
+    bed_min: Annotated[float | None, Field(description="Lowest bed temperature on the label, °C.")] = None,
+    bed_max: Annotated[float | None, Field(description="Highest bed temperature on the label, °C.")] = None,
+    diameter_mm: Annotated[float | None, Field(description="Filament diameter, usually 1.75.")] = None,
+    weight_g: Annotated[float | None, Field(description="Net filament weight in grams, e.g. 1000.")] = None,
+    price: Annotated[float | None, Field(description="Price paid for the spool, used to set cost per kg.")] = None,
+    density: Annotated[float | None, Field(description="Density in g/cm³ if printed on the label.")] = None,
+    max_speed_mm_s: Annotated[float | None, Field(description="Maximum print speed in mm/s if printed on the label.")] = None,
+    drying: Annotated[str | None, Field(description="Drying instructions from the label, kept in the profile notes.")] = None,
+    name: Annotated[str | None, Field(description="Preset name. Default: 'Brand Product Colour @printer'.")] = None,
+    save: Annotated[bool, Field(description="False (default) only previews. True writes the preset; do it after the user confirms the preview.")] = False,
+    overwrite: Annotated[bool, Field(description="With save=true, replace an existing preset of the same name.")] = False,
+    add_to_inventory: Annotated[bool, Field(description="With save=true, also record the spool in the local inventory.")] = False,
+) -> dict:
+    """Turn the details printed on a filament spool label into a filament preset for the slicer.
+
+    Read the label photo yourself and pass what it says; only material is required, and anything missing gets a
+    typical value for that material (listed in the result). The preset inherits from the closest existing preset
+    for the printer. With save=false it only returns a preview; show it to the user, then call again with
+    save=true to write it to the slicer's user presets (overwrite=true replaces an existing one). For other preset
+    edits use save_user_preset."""
     p = _printer(printer)
     info = materials.LabelInfo(material=material, brand=brand, product=product, colour_name=colour_name,
                                colour_hex=colour_hex, nozzle_min=nozzle_min, nozzle_max=nozzle_max,
@@ -421,39 +573,72 @@ def create_filament_profile(material: str, printer: str | None = None, brand: st
     return result
 
 
-@mcp.tool()
+@mcp.tool(title="Add spool", annotations=_ann("Add spool", idempotent=False))
 @threaded
-def add_spool(material: str, total_g: float = 1000, remaining_g: float | None = None, brand: str | None = None,
-              colour_name: str | None = None, colour_hex: str | None = None, filament_preset: str | None = None,
-              price: float | None = None, notes: str | None = None) -> dict:
-    """Add a spool to the local inventory (kept on this computer)."""
+def add_spool(
+    material: Annotated[str, Field(description="Material, e.g. 'PLA' or 'PETG'.")],
+    total_g: Annotated[float, Field(description="Net weight of a full spool in grams.")] = 1000,
+    remaining_g: Annotated[float | None, Field(description="Grams left now, if not full.")] = None,
+    brand: Annotated[str | None, Field(description="Brand.")] = None,
+    colour_name: Annotated[str | None, Field(description="Colour name.")] = None,
+    colour_hex: Annotated[str | None, Field(description="Colour as '#RRGGBB'.")] = None,
+    filament_preset: Annotated[str | None, Field(description="Filament preset to print it with.")] = None,
+    price: Annotated[float | None, Field(description="Price paid.")] = None,
+    notes: Annotated[str | None, Field(description="Free-text notes, e.g. where it's stored or when it was dried.")] = None,
+) -> dict:
+    """Record a new spool in the user's local filament inventory.
+
+    Use it when the user buys or opens a spool; create_filament_profile can also add one when saving a profile.
+    Each call adds another spool with a new id, stored in a JSON file on this computer. Returns the spool."""
     return INVENTORY.add(material, total_g, remaining_g, brand, colour_name, colour_hex, filament_preset, price, notes)
 
 
-@mcp.tool()
+@mcp.tool(title="List spools", annotations=_ann("List spools", read_only=True))
 @threaded
-def list_spools(need_g: float | None = None, material: str | None = None) -> dict:
-    """List spools and how much is left. need_g: also say which spools have enough for a print of that weight."""
+def list_spools(
+    need_g: Annotated[float | None, Field(description="Grams a planned print needs; spools with enough left (plus 5%) are marked.")] = None,
+    material: Annotated[str | None, Field(description="Only list spools of this material.")] = None,
+) -> dict:
+    """List the spools in the local inventory with how much filament each has left.
+
+    Use it before a long print to pick a spool with enough filament. Read-only."""
     return INVENTORY.list(need_g, material)
 
 
-@mcp.tool()
+@mcp.tool(title="Update spool", annotations=_ann("Update spool", destructive=True, idempotent=False))
 @threaded
-def update_spool(spool_id: str, remaining_g: float | None = None, use_g: float | None = None,
-                 remove: bool = False, notes: str | None = None, filament_preset: str | None = None) -> dict:
-    """Update a spool: set remaining_g (e.g. after weighing), subtract use_g after a print, or remove it."""
+def update_spool(
+    spool_id: Annotated[str, Field(description="Spool id from list_spools or add_spool.")],
+    remaining_g: Annotated[float | None, Field(description="Set grams left, e.g. after weighing the spool.")] = None,
+    use_g: Annotated[float | None, Field(description="Subtract grams used by a finished print.")] = None,
+    remove: Annotated[bool, Field(description="Delete the spool from the inventory.")] = False,
+    notes: Annotated[str | None, Field(description="Replace the spool's notes.")] = None,
+    filament_preset: Annotated[str | None, Field(description="Set the filament preset to print it with.")] = None,
+) -> dict:
+    """Change a spool in the local inventory: set what's left, subtract a finished print, edit notes, or remove it.
+
+    use_g subtracts each time it is called, so don't repeat it for the same print. remove=true deletes the spool
+    record permanently. Returns the updated spool."""
     return INVENTORY.update(spool_id, remaining_g, use_g, remove, notes=notes, filament_preset=filament_preset)
 
 
 # ======================================================================== troubleshooting & calibration
-@mcp.tool()
+@mcp.tool(title="Diagnose a failed print", annotations=_ann("Diagnose a failed print", read_only=True))
 @threaded
-def diagnose_print(issues: list[str] | None = None, severity: str = "moderate", printer: str | None = None,
-                   process: str | None = None, filament: str | None = None) -> dict:
-    """Print doctor. Call with no issues to get the catalogue of defects and what each looks like; look at the
-    user's photos of the failed print, pick the matching issue ids (e.g. stringing, warping, layer_adhesion),
-    then call again with them. Returns causes, checks and concrete setting changes based on the presets in use,
-    plus an overrides dict to re-slice with. Conflicting fixes are reported, not applied."""
+def diagnose_print(
+    issues: Annotated[list[str] | None, Field(description="Defect ids seen in the photos, e.g. ['stringing', 'warping']. Omit to get the catalogue of 13 defects with what each looks like.")] = None,
+    severity: Annotated[str, Field(description="'mild', 'moderate' or 'severe'; scales how big the suggested changes are.")] = "moderate",
+    printer: Printer = None,
+    process: Process = None,
+    filament: Annotated[str | None, Field(description="Filament preset the print used. Default: the selected filament.")] = None,
+) -> dict:
+    """Explain what went wrong with a failed 3D print and which settings to change, from defects you identify in
+    the user's photos.
+
+    First call it with no issues to get the defect catalogue, compare the photos with each 'looks_like', then call
+    again with the matching ids. Suggestions are computed from the presets actually in use; fixes that conflict
+    are reported, not applied. Read-only: it changes no presets (save them with save_user_preset if the user wants
+    to keep them). Returns causes, checks and an overrides dict for slice_model."""
     if not issues:
         return {"issues": doctor.catalog(),
                 "how": "Compare the user's photos with 'looks_like', then call diagnose_print(issues=[...])."}
@@ -465,17 +650,23 @@ def diagnose_print(issues: list[str] | None = None, severity: str = "moderate", 
     return report
 
 
-@mcp.tool()
+@mcp.tool(title="Make a calibration print", annotations=_ann("Make a calibration print"))
 @threaded
-def make_calibration_print(kind: str, printer: str | None = None, process: str | None = None,
-                           filament: str | None = None, values: list[float] | None = None,
-                           output_dir: str | None = None) -> dict:
-    """Generate and slice a calibration print. kind:
-    temperature_tower: one tower, a block per nozzle temperature (values = temperatures, default from the filament range);
-    flow: one small cube per flow ratio (values = ratios, default ±6% around the filament's);
-    retraction: two towers per retraction length (values = mm, default 0.4–2.0);
-    first_layer: five single-layer squares across the bed to check levelling and squish.
-    Returns the files and how to read the result."""
+def make_calibration_print(
+    kind: Annotated[str, Field(description="'temperature_tower', 'flow', 'retraction' or 'first_layer'.")],
+    printer: Printer = None,
+    process: Process = None,
+    filament: Annotated[str | None, Field(description="Filament preset to calibrate. Default: the selected filament.")] = None,
+    values: Annotated[list[float] | None, Field(description="Values to test: temperatures in °C, flow ratios, or retraction lengths in mm; at most 8. Default: a sensible range for the filament.")] = None,
+    output_dir: Annotated[str | None, Field(description="Folder for the files. Default: Documents/Anycubic Slicer MCP/calibration.")] = None,
+) -> dict:
+    """Generate and slice a calibration print for tuning a filament or the printer.
+
+    temperature_tower: one tower with a block per nozzle temperature, with the temperature changes written into
+    the G-code. flow: one small cube per flow ratio. retraction: two towers per retraction length. first_layer:
+    five single-layer squares across the bed to check levelling. Use it when a filament is new or prints look off
+    and diagnose_print points to temperature, flow or retraction. Writes the G-code and .gcode.3mf files and
+    returns their paths plus how to read the result."""
     chosen = SLICER.choose(printer, process, [filament] if filament else None)
     fil = LIB.resolve("filament", chosen["filaments"][0])
     out = Path(output_dir).expanduser() if output_dir else _default_out() / "calibration"
@@ -533,36 +724,58 @@ def make_calibration_print(kind: str, printer: str | None = None, process: str |
     raise ValueError("kind must be temperature_tower, flow, retraction or first_layer")
 
 
-@mcp.tool()
+@mcp.tool(title="Optimize multi-colour waste", annotations=_ann("Optimize multi-colour waste"))
 @threaded
-def optimize_multicolor(models: list[str], filaments: list[str], object_filaments: list[int],
-                        filament_colours: list[str] | None = None, printer: str | None = None,
-                        process: str | None = None, output_dir: str | None = None,
-                        output_name: str | None = None) -> dict:
-    """Measure how much filament a multi-colour print wastes on colour changes, test waste-cutting strategies,
-    and recommend one only if it keeps every colour and really saves filament. Plus layout tips."""
+def optimize_multicolor(
+    models: Annotated[list[str], Field(description="Model paths, one per colour part, in the same order as object_filaments.")],
+    filaments: Annotated[list[str], Field(description="Filament preset for each slot, e.g. two entries for a two-colour print.")],
+    object_filaments: Annotated[list[int], Field(description="Filament slot (1-based) for each model, e.g. [1, 2].")],
+    filament_colours: Annotated[list[str] | None, Field(description="'#RRGGBB' for each slot; colour order affects how much is flushed.")] = None,
+    printer: Printer = None,
+    process: Process = None,
+    output_dir: OutputDir = None,
+    output_name: Annotated[str | None, Field(description="Base name for the output files.")] = None,
+) -> dict:
+    """Measure how much filament a multi-colour print wastes on colour changes and try settings that might
+    reduce it.
+
+    Recommends a setting only if every colour survives and it saves filament; otherwise says the default is best
+    and gives layout tips such as fewer colour changes per layer. Slices several times, so it takes a while, and
+    writes each test's G-code to output_dir. For single-colour prints use slice_model or compare_slices."""
     return optimize.multicolor(SLICER, SliceRequest(
         models=models, printer=printer, process=process, filaments=filaments, object_filaments=object_filaments,
         filament_colours=filament_colours, output_dir=output_dir, output_name=output_name or Path(models[0]).stem))
 
 
 # ======================================================================== whole projects
-@mcp.tool()
+@mcp.tool(title="Plan a multi-part project", annotations=_ann("Plan a multi-part project", idempotent=False))
 @threaded
-def plan_project(path: str | None = None, plan_id: str | None = None, goal: str | None = None,
-                 max_hours_per_plate: float | None = None, separate_supported: bool | None = None,
-                 quantities: dict[str, int] | None = None, exclude: list[str] | None = None,
-                 include: list[str] | None = None, scales: dict[str, float] | None = None,
-                 colours: dict[str, str] | None = None, answered: list[str] | None = None,
-                 printer: str | None = None, process: str | None = None, filaments: list[str] | None = None,
-                 overrides: dict | None = None, spacing_mm: float | None = None) -> dict:
-    """Plan a multi-part project: every model in a folder or .zip (or one model file), each laid in its best
-    orientation, packed onto as few plates as the goal allows. Reads counts from file names (clip_x4.stl) and READMEs.
-    Returns `questions` for anything unclear (duplicate versions, odd scale, parts too big, missing counts, colours,
-    grouping) plus stated `assumptions`. Blocking questions must be put to the user and answered before slicing.
-    Re-plan with plan_id plus answers: quantities={"clip.stl": 4}, exclude=[ids], include=[ids], scales={id: 25.4},
-    colours={id: "red"}, goal="fewest_plates"|"by_colour", max_hours_per_plate=8, separate_supported=true,
-    answered=[question ids the user settled by keeping the default]. Ids are paths relative to the project folder."""
+def plan_project(
+    path: Annotated[str | None, Field(description="Folder, .zip, or single model file of the project. Required unless plan_id is given.")] = None,
+    plan_id: Annotated[str | None, Field(description="Re-plan an earlier plan with new answers; earlier answers are kept.")] = None,
+    goal: Annotated[str | None, Field(description="'fewest_plates' or 'by_colour' (one colour per plate).")] = None,
+    max_hours_per_plate: Annotated[float | None, Field(description="Keep each plate under this many hours (rough estimate), 0.25 to 200.")] = None,
+    separate_supported: Annotated[bool | None, Field(description="True puts parts that need supports on their own plates.")] = None,
+    quantities: Annotated[dict[str, int] | None, Field(description="Copies per part id, e.g. {'clip.stl': 4}.")] = None,
+    exclude: Annotated[list[str] | None, Field(description="Part ids to leave out.")] = None,
+    include: Annotated[list[str] | None, Field(description="Part ids to put back in, such as test pieces left out by default.")] = None,
+    scales: Annotated[dict[str, float] | None, Field(description="Scale per part id, e.g. {'bracket.stl': 25.4} for a part exported in inches.")] = None,
+    colours: Annotated[dict[str, str] | None, Field(description="Colour per part id, e.g. {'knob.stl': 'red'}, used by goal='by_colour'.")] = None,
+    answered: Annotated[list[str] | None, Field(description="Question ids the user settled by keeping the suggested default.")] = None,
+    printer: Printer = None,
+    process: Process = None,
+    filaments: Filaments = None,
+    overrides: Annotated[dict | None, Field(description="Setting overrides applied to every plate, as for slice_model.")] = None,
+    spacing_mm: Annotated[float | None, Field(description="Gap between parts on a plate in mm, 1 to 50. Default 6.")] = None,
+) -> dict:
+    """Plan a whole multi-part project from a folder or .zip: find every model, lay each in its best orientation
+    and pack them onto plates.
+
+    Reads counts from names like clip_x4.stl and from READMEs. Returns plates with rough time and filament, stated
+    assumptions, and questions about anything unclear (duplicate versions, odd scale, parts too big, missing
+    counts, colours, grouping). Put the blocking questions to the user, then call again with plan_id and the
+    answers; part ids are paths relative to the project folder. Slicing happens only in slice_project. Saves the
+    plan, and unpacks zips, under the server's state folder; each call without plan_id starts a new plan."""
     if spacing_mm is not None:
         _bounded("spacing_mm", spacing_mm, 1, 50)
     if max_hours_per_plate is not None:
@@ -575,12 +788,19 @@ def plan_project(path: str | None = None, plan_id: str | None = None, goal: str 
     return project.summary(project.build_plan(SLICER, path, plan_id, inputs))
 
 
-@mcp.tool()
+@mcp.tool(title="Slice a planned project", annotations=_ann("Slice a planned project"))
 @threaded
-def slice_project(plan_id: str, plates: list[int] | None = None, output_dir: str | None = None) -> list:
-    """Slice every plate of an approved plan (or just `plates`). Refuses while the plan has unanswered blocking
-    questions. Each plate becomes its own .gcode and .gcode.3mf; parts that the slicer can't fit are moved to the
-    next plate. Returns real times and weights per plate, totals, and a preview of each plate."""
+def slice_project(
+    plan_id: Annotated[str, Field(description="Plan id from plan_project.")],
+    plates: Annotated[list[int] | None, Field(description="Only slice these plate numbers. Default: all.")] = None,
+    output_dir: Annotated[str | None, Field(description="Folder for the plate files. Default: Documents/Anycubic Slicer MCP/<plan id>.")] = None,
+) -> list:
+    """Slice every plate of a plan from plan_project once the user has approved it.
+
+    Refuses while any blocking question is unanswered. Each plate is sliced separately into its own .gcode and
+    .gcode.3mf; parts the slicer can't fit move to the next plate. Takes about as long as slicing each plate,
+    writes the files plus project_summary.json to output_dir (replacing earlier runs), and returns real times and
+    weights per plate, totals, and a preview image of up to six plates."""
     if plates:
         for n in plates:
             _bounded("plate", n, 1, 500)
