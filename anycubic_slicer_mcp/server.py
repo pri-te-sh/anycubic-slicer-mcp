@@ -1187,11 +1187,12 @@ def print_this_project(project_path: str = "") -> str:
 def check_my_printer(problem: str = "") -> str:
     """Look at the printer live and work out what's wrong with a print."""
     return (f"{problem + ' ' if problem else ''}Call printer_status (use find_printers first if you don't know the printer's "
-            "address). Tell me its state, the job's progress, temperatures against their targets, which filament is "
-            "loaded where, and explain any error codes in plain words. Then take a printer_camera_snapshot and describe "
+            "address; if it finds nothing, the printer is probably on Anycubic Cloud, so use cloud_printer_status and "
+            "describe what its screenshot shows instead of a camera photo). Tell me its state, the job's progress, temperatures against their targets, which filament is "
+            "loaded where, and explain any error codes in plain words. Then take a printer_camera_snapshot (LAN mode) and describe "
             "what you see on the bed. If something is wrong, match it to diagnose_print's issues and suggest fixes for "
             "now and for the next slice. If the print should be paused, resumed or stopped, say why and ask me first; "
-            "use control_print only after I say yes.")
+            "use control_print (LAN mode) or the Workbench's Pause or End through slicer_click (cloud) only after I say yes.")
 
 
 def main() -> None:

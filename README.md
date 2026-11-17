@@ -34,8 +34,9 @@ You can ask for things like:
 - "How much filament does this two-colour print waste on colour changes?"
 - "Here's a zip of the whole robot kit. Plan the plates, ask me what's unclear, then slice it."
 - "My print just paused. What's wrong, and can it carry on?"
+- "Send it to the printer. I've cleared the bed."
 
-The server drives the slicer's own command line on your computer. It never sends a print to your printer, so you still check the preview and press print yourself. If you switch on your printer's LAN mode, it can also read the printer's live state and camera, and pause, resume or stop a print after you say yes.
+The server drives the slicer's own command line on your computer, so you check the preview before anything is printed. It can also send a print to your printer and watch it: directly over LAN mode, or through the slicer window when the printer stays on Anycubic Cloud. Anything that starts, pauses or stops a print waits for your yes in the chat.
 
 ## What it does
 
@@ -84,15 +85,40 @@ It doesn't guess when the files are unclear. It returns questions for the agent 
 
 Each plate is sliced as its own `.gcode.3mf`. If the slicer can't fit everything on a plate, the extras move to the next one. In a test with an 11-file kit, three questions settled it and the result was one plate of 14 pieces: 2h 32m 23s and 71.62 g.
 
-### Watch the printer (LAN mode)
+### Send and watch prints
 
-With LAN mode on (printer screen: Settings > Network > LAN Mode), the agent can see what your printer sees. `printer_status` reports the state, the job's progress and time left, nozzle and bed temperatures against their targets, the filament in each slot and how the last print ended, and any error code with Anycubic's meaning and a link to the fix. `printer_camera_snapshot` takes a photo with the built-in camera so the agent can look at the bed. Together with the print doctor, that's enough to work out why a print paused and whether it can carry on.
+A Kobra X runs either in LAN mode or on Anycubic Cloud, not both: with LAN mode on, the cloud and the phone app's remote control stop. The server works with either.
 
-`control_print` can pause, resume or stop a print. It previews first and only acts after you confirm in the chat. It can't start prints, heat anything or move the head.
+**LAN mode** (printer screen: Settings > Network > LAN Mode). The server talks to the printer directly over your network, using the protocol the community has documented for the Kobra X, S1 and Kobra 3 family. No Anycubic account is involved.
 
-Tested on a Kobra X with firmware 2.0.2.8: finding it, reading its status and the camera all work. Pause, resume and stop have so far only been tested against a simulated printer.
+- `printer_status` reports the state, the job's progress and time left, nozzle and bed temperatures against their targets, the filament in each slot, how the last print ended, and any error code with Anycubic's meaning and a link to the fix.
+- `printer_camera_snapshot` takes a photo with the built-in camera so the agent can look at the bed.
+- `send_print` uploads a sliced `.gcode.3mf` and starts it. First it shows what will happen: the file's time and weight, which slot each filament comes from, and whether the printer is idle and is the model the file was sliced for. It refuses a filament that doesn't match the slot's material.
+- `control_print` pauses, resumes or stops the current print.
 
-It talks to the printer directly over your network, using the protocol the community has documented for the Kobra X, S1 and Kobra 3 family. No Anycubic account is involved. Turning LAN mode on disconnects the printer from Anycubic Cloud and the phone app, and the switch can't be changed while a print is running or paused.
+**Anycubic Cloud** (LAN mode off, so the phone app keeps working). Anycubic doesn't publish a cloud API, so the server goes through the slicer window, which is already signed in to your account. The server never sees your login.
+
+- `cloud_printer_status` reads the window's Workbench screen: state, job, progress, layer, time left, temperatures, part fan, firmware and the loaded slots, plus a screenshot.
+- `print_from_slicer` opens the window's Start Print dialog for the plate you sliced there and reads it back: task, time, weight, filament, printer and whether it can take the job. It presses Start Print only after you confirm, and only if the dialog still shows the same plate.
+
+Starting, pausing, resuming and stopping always go in two steps: the tool previews what it will do, the agent asks you, and it acts only after you say yes in the chat.
+
+Tested on a Kobra X with firmware 2.0.2.8 and Anycubic Slicer Next 2.0.0.3 on macOS:
+
+| | Tested on the real printer | Not yet tested on the real printer |
+|---|---|---|
+| LAN mode | finding it, status, camera, the `send_print` preview, refusing PETG into a PLA slot, refusing to pause an idle printer | the actual upload and start; pause, resume and stop (tested against a simulated printer) |
+| Anycubic Cloud | reading a live print from the Workbench, reading the Start Print dialog, refusing to start while the printer is busy | the actual start; pausing or ending from the Workbench |
+
+### Drive the slicer window
+
+Some things only the window does, so the agent can use it too (macOS for now):
+
+- `restart_slicer` closes the window the normal way and reopens it with the presets you chose selected and a file open. The window only loads new presets when it starts. It never force-quits: if the window is asking whether to save a project, it tells the agent to ask you.
+- `slicer_screenshot` returns a picture of just the slicer's window and the text in it.
+- `slicer_click` clicks a button by its label, for example `Slice plate` or `Cancel`. Clicks only land inside the slicer window, and only while it's in front. Buttons that start, send, pause, stop, delete or discard something are refused unless you've said yes to that exact click.
+
+Screenshots need Screen Recording permission and clicks need Accessibility permission for the app that runs the server (System Settings > Privacy & Security). Both are your call.
 
 ### Calibration prints
 
@@ -228,14 +254,22 @@ uv tool uninstall anycubic-slicer-mcp
 | Printer (LAN mode) | `find_printers` | Finds Anycubic printers on your network and whether LAN mode is on |
 | | `printer_status` | State, job, temperatures, errors explained, loaded filament and ACE slots |
 | | `printer_camera_snapshot` | One photo from the printer's camera (needs ffmpeg) |
+| | `send_print` | Uploads a sliced file and starts it, after you confirm |
 | | `control_print` | Pause, resume or stop the current print, after you confirm |
+| Printer (Anycubic Cloud) | `cloud_printer_status` | The printer's state and job, read from the slicer window's Workbench |
+| | `print_from_slicer` | Starts the plate open in the slicer window through its Start Print dialog, after you confirm |
+| Slicer window (macOS) | `restart_slicer` | Reopens the window with chosen presets selected and a file open |
+| | `slicer_screenshot` | A picture of the slicer window and the text in it |
+| | `slicer_click` | Clicks a button by its label; print, stop and delete buttons need your yes |
 
 It also ships seven prompts that walk the agent through common jobs: `setup_check`, `filament_from_label`, `diagnose_from_photos`, `make_it_stronger`, `multicolor_waste`, `print_this_project` and `check_my_printer`.
 
 ## Safety
 
-- It never sends a print job to a printer and never connects to a cloud service.
-- Printer tools only talk to a printer you point them at, on your own network (public addresses are refused). They read status, start and stop the camera stream, and send pause, resume or stop, each only after you confirm. The printer's address is remembered; its LAN credentials are kept in memory only.
+- Nothing starts, pauses, resumes or stops a print without your yes in the chat. Each of those tools previews first, and the agent is told never to act on its own.
+- The server never connects to Anycubic Cloud itself and never reads your account login. Cloud printing goes through the slicer window, which you're signed in to.
+- LAN printer tools only talk to a printer you point them at, on your own network (public addresses are refused). The printer's address is remembered; its LAN credentials are kept in memory only.
+- Window clicks only land inside the slicer's window while it's in front, never in its title bar, and buttons that print, stop, delete or discard need your yes.
 - 3MF project files that contain post-processing scripts are refused, because those scripts can run programs on your computer.
 - Settings that hold custom G-code templates can't be overridden unless you set `ANYCUBIC_MCP_ALLOW_GCODE_TEMPLATES=1`.
 - Network paths (UNC on Windows) are blocked unless you set `ANYCUBIC_MCP_ALLOW_NETWORK_PATHS=1`.
@@ -264,7 +298,13 @@ Any printer with a preset in Anycubic Slicer Next, since the server reads the sl
 Not yet. It drives Anycubic Slicer Next, which is built on OrcaSlicer. Support for other OrcaSlicer-based slicers would be a welcome contribution.
 
 **Does the slicer window need to be open?**
-No. The server runs the slicer in the background. It uses the printer, process and filament you last picked in the app, so open the app once to choose them.
+Not for slicing. The server runs the slicer in the background, using the printer, process and filament you last picked in the app, so open the app once to choose them. The cloud printer tools and the window tools do need it open.
+
+**Does it send anything to my printer?**
+Only when you say so. `send_print` (LAN mode) and `print_from_slicer` (Anycubic Cloud) start a print, and `control_print` pauses, resumes or stops one. Each shows you what it will do first and acts only after you confirm in the chat. Everything else reads.
+
+**Does it work with Anycubic Cloud and the phone app?**
+Yes, through the slicer window: keep LAN mode off, stay signed in to the slicer, and use `cloud_printer_status` and `print_from_slicer`. That part works on macOS for now. The LAN tools are faster and don't need the window, but LAN mode switches the cloud and the phone app's remote control off.
 
 **Does it work on Linux?**
 Not yet. Windows and macOS are supported. Linux pull requests are welcome.

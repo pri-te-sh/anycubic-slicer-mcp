@@ -151,7 +151,7 @@ def hero(animated: bool = True) -> str:
     <text x="0" y="0" font-family="{FONT}" font-size="20" font-weight="600" class="accent" fill="{ACCENT}">MCP server for Anycubic Slicer Next</text>
     <text x="-3" y="74" font-family="{FONT}" font-size="66" font-weight="700" letter-spacing="-2" class="ink" fill="{INK}">Anycubic Slicer MCP</text>
     <text x="0" y="128" font-family="{FONT}" font-size="26" class="grey" fill="{GREY}">Your AI agent slices, checks and tunes</text>
-    <text x="0" y="162" font-family="{FONT}" font-size="26" class="grey" fill="{GREY}">your 3D prints. You still press print.</text>
+    <text x="0" y="162" font-family="{FONT}" font-size="26" class="grey" fill="{GREY}">your 3D prints, and prints when you say yes.</text>
     <text x="0" y="230" font-family="{MONO}" font-size="16" class="grey" fill="{GREY}">slice_model  ›  30m 48s · 9.66 g PLA · 45 layers</text>
   </g>
   <g transform="translate(985,322) scale(1,0.62) rotate(-8)">

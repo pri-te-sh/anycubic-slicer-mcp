@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "anycubic-slicer-mcp"
 version = "1.4.0"
-description = "MCP server that lets AI agents slice, preview, diagnose and optimise 3D prints with Anycubic Slicer Next (Windows and macOS), and check the printer over LAN"
+description = "MCP server that lets AI agents slice, preview, diagnose and optimise 3D prints with Anycubic Slicer Next (Windows and macOS), and send and watch prints over LAN mode or Anycubic Cloud"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
