@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import functools
+import tempfile
 import json
 import re
 import time
@@ -17,6 +18,7 @@ from pydantic import Field
 
 from . import __version__
 from . import analysis, calibration, doctor, gcode as gc, materials, optimize, printer as lan, project, render
+from . import window as win
 from .install import find_install, state_dir
 from .inventory import Inventory
 from .mesh import describe, load_mesh, rotation
@@ -44,8 +46,14 @@ Anycubic Slicer Next, headless. Typical flows:
   paused print together with diagnose_print. control_print pauses, resumes or stops a print: call it without confirm
   first, tell the user exactly what will happen, and only call it with confirm=True after they say yes in this
   conversation. Never stop a print on your own judgement.
-Never claim a print is safe without the user checking the preview. Nothing is ever sent to a printer except the
-pause, resume and stop commands of control_print, and the camera start/stop of printer_camera_snapshot.
+- Send a print (LAN mode): slice → preview_gcode → show the user → send_print without confirm (it checks the printer
+  is idle and maps each filament to a loaded slot) → tell the user what will happen and ask them to check the bed is
+  empty → send_print with confirm=True only after they say yes in this conversation. Never send on your own initiative.
+- Slicer window: open_in_slicer shows a file; restart_slicer reopens the window with chosen presets selected (and makes
+  it load newly saved presets); slicer_screenshot shows you the window; slicer_click clicks inside it (macOS, needs the
+  user's Accessibility permission). Use them when the user wants to see or do something in the window itself.
+Never claim a print is safe without the user checking the preview. Nothing is sent to a printer except send_print,
+control_print's pause, resume and stop, and the camera start/stop of printer_camera_snapshot, each as described above.
 """
 
 mcp = FastMCP("anycubic-slicer", instructions=INSTRUCTIONS)
@@ -917,6 +925,119 @@ def control_print(
     filament is fixed."""
     h = lan.resolve_host(host)
     return lan.control(h, action.strip().lower(), bool(confirm))
+
+
+@mcp.tool(title="Send a print to the printer",
+          annotations=_ann("Send a print to the printer", destructive=True, idempotent=False, open_world=True))
+@threaded
+@_lan
+def send_print(
+    file: Annotated[str, Field(description="A sliced .gcode.3mf on this computer, e.g. the gcode_3mf path slice_model returned.")],
+    confirm: Annotated[bool, Field(description="False (default) only previews. Set True only after the user has said yes to this print in this conversation.")] = False,
+    slots: Annotated[list[int] | None, Field(description="Colour-unit slot (1-4) for each filament in the file, in order, e.g. [4]. Omit to pick by material and nearest colour.")] = None,
+    host: PrinterHost = None,
+) -> dict:
+    """Upload a sliced .gcode.3mf to the printer over LAN mode and start printing it, after the user confirms.
+
+    Call it first without confirm: it reads the file (printer model, time, weight, filaments), checks the printer is
+    idle and is the model the file was sliced for, and maps each filament to a loaded slot of the colour unit,
+    refusing a material mismatch. Show the user that preview, ask them to make sure the bed is empty, and only on an
+    explicit yes call again with confirm=True. Then it uploads the file (up to a few minutes for big files), sends the
+    start command and waits for the printer to report that it's heating or printing. Starting a print heats the nozzle
+    and bed and moves the head; never send one on your own initiative. Supports one colour unit (the Kobra X's own
+    4-slot unit or a single ACE)."""
+    h = lan.resolve_host(host)
+    p = Path(file).expanduser().resolve()
+    if p.is_file():
+        from .slicer import scan_3mf
+        scan_3mf(p)
+    return lan.send_job(h, p, slots, bool(confirm))
+
+
+# ======================================================================== slicer window
+_LAST_SHOT: dict[str, tuple[int, int]] = {}
+
+
+def _window_shot() -> list:
+    out = Path(tempfile.gettempdir()) / "acmcp-slicer-window.png"
+    meta = win.screenshot(INSTALL, out)
+    _LAST_SHOT["size"] = tuple(meta["image_size"])
+    return [Image(data=out.read_bytes(), format="png"), json.dumps(meta)]
+
+
+@mcp.tool(title="Restart the slicer window", annotations=_ann("Restart the slicer window", destructive=True, idempotent=False))
+@threaded
+def restart_slicer(
+    open_path: Annotated[str | None, Field(description="A model, .3mf or .gcode.3mf to open when it starts. Omit to just restart.")] = None,
+    printer: Annotated[str | None, Field(description="Printer preset to have selected, e.g. 'Kobra X'. Needed to choose a process or filaments.")] = None,
+    process: Process = None,
+    filaments: Filaments = None,
+    colours: Annotated[list[str] | None, Field(description="'#RRGGBB' per filament for the window's colour swatches.")] = None,
+) -> dict:
+    """Close Anycubic Slicer Next the normal way and open it again, optionally with presets selected and a file open.
+
+    Use it after saving presets (the window only reads them at start-up) or to open a model with exact presets picked,
+    so the user can slice and send from the window with your settings. It never force-quits: if the window is asking
+    whether to save the current project, nothing changes and you get told to ask the user to answer that dialog.
+    Selecting presets edits the slicer's settings file while it is closed (a backup is kept next to it)."""
+    LIB.reload()
+    path = None
+    if open_path:
+        path = checked_file(open_path, MODEL_SUFFIXES | gc.GCODE_SUFFIXES | {".gcode.3mf"})
+        if path.suffix.lower() == ".3mf":
+            from .slicer import scan_3mf
+            scan_3mf(path)
+    chosen = None
+    if printer or process or filaments:
+        if not printer:
+            raise ValueError("Give printer= too, so the process and filaments are selected for the right printer.")
+        machine = _printer(printer)
+        chosen = {"printer": machine,
+                  "process": LIB.get("process", process, machine).name if process else None,
+                  "filaments": [LIB.get("filament", f, machine).name for f in filaments] if filaments else None}
+    q = win.quit_slicer(INSTALL)
+    if not q["quit"]:
+        return {"restarted": False, **q}
+    backup = win.select_presets(INSTALL, chosen["printer"], chosen["process"], chosen["filaments"], colours) if chosen else None
+    win.launch(INSTALL, path)
+    LIB.reload()
+    return {"restarted": True, "opened": path.name if path else None, "selected": chosen,
+            "settings_backup": str(backup) if backup else None,
+            "note": "It takes about 15 seconds to load; slicer_screenshot shows what it looks like."}
+
+
+@mcp.tool(title="Screenshot the slicer window", annotations=_ann("Screenshot the slicer window", read_only=True))
+@threaded
+def slicer_screenshot() -> list:
+    """Bring the Anycubic Slicer Next window to the front and return a picture of just that window.
+
+    Use it to see what the user sees: which presets are selected, the sliced time and weight, a dialog that's waiting
+    for an answer. Its pixel coordinates are what slicer_click takes. macOS only for now; needs Screen Recording
+    permission for the app running this server."""
+    return _window_shot()
+
+
+@mcp.tool(title="Click in the slicer window", annotations=_ann("Click in the slicer window", destructive=True, idempotent=False))
+@threaded
+def slicer_click(
+    x: Annotated[float, Field(description="X in pixels of the latest slicer_screenshot image.")] = 0,
+    y: Annotated[float, Field(description="Y in pixels of the latest slicer_screenshot image.")] = 0,
+    double: Annotated[bool, Field(description="Double-click instead of a single click.")] = False,
+    key: Annotated[str | None, Field(description="Instead of clicking, press one key: return, escape, tab, space or delete.")] = None,
+) -> list:
+    """Click (or press one key) in the Anycubic Slicer Next window, then return a fresh screenshot of it.
+
+    Take slicer_screenshot first and click on what you can see in it. Clicks only land inside the slicer's window and
+    only when it's the frontmost window. Don't click anything that prints, sends, deletes or overwrites unless the user
+    asked for exactly that in this conversation. macOS only; needs Accessibility permission for the app running this
+    server, which is the user's decision."""
+    if key:
+        done = win.press(INSTALL, key.strip().lower())
+    else:
+        if "size" not in _LAST_SHOT:
+            raise ValueError("Take slicer_screenshot first, then click on coordinates in that image.")
+        done = win.click(INSTALL, x, y, _LAST_SHOT["size"], bool(double))
+    return [*_window_shot(), json.dumps(done)]
 
 
 # ======================================================================== prompts

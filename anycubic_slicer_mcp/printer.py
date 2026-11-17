@@ -27,6 +27,8 @@ import tempfile
 import threading
 import time
 import uuid
+import xml.etree.ElementTree as ET
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -356,8 +358,8 @@ class Link:
     def _sub_topic(self) -> str:
         return f"{TOPIC_ROOT}/printer/+/{self.c.model_id}/{self.c.device_id}/#"
 
-    def _pub_topic(self, type_: str) -> str:
-        return f"{TOPIC_ROOT}/web/printer/{self.c.model_id}/{self.c.device_id}/{type_}"
+    def _pub_topic(self, type_: str, role: str = "web") -> str:
+        return f"{TOPIC_ROOT}/{role}/printer/{self.c.model_id}/{self.c.device_id}/{type_}"
 
     def _ssl(self) -> ssl.SSLContext:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -434,8 +436,8 @@ class Link:
             finally:
                 self._client = None
 
-    def send(self, type_: str, action: str, data: Any = None) -> None:
-        self._client.publish(self._pub_topic(type_), json.dumps(_envelope(type_, action, data)), qos=0)
+    def send(self, type_: str, action: str, data: Any = None, role: str = "web") -> None:
+        self._client.publish(self._pub_topic(type_, role), json.dumps(_envelope(type_, action, data)), qos=0)
 
     def wait_for(self, pred: Callable[[list[tuple[str, dict]]], bool], seconds: float) -> bool:
         end = time.monotonic() + seconds
@@ -503,6 +505,7 @@ class State:
         self.external: dict | None = None
         self.errors: dict[int, dict] = {}
         self.camera: dict = {}
+        self.urls: dict = {}
         self.seen: set[str] = set()
 
     def feed(self, topic: str, msg: dict) -> None:
@@ -524,6 +527,7 @@ class State:
                 self.temps.update(data["temp"])
             if isinstance(data.get("urls"), dict):
                 self.camera.update(data["urls"])
+                self.urls.update(data["urls"])
         elif t == "tempature":
             self.temps.update(data)
         elif t == "fan":
@@ -812,3 +816,176 @@ def snapshot(host: str, out: Path) -> dict:
                 link.send("light", "control", {"type": 3, "status": 0, "brightness": 0})
             time.sleep(0.5)
     return {"image": str(out), "light_restored": cam_light_was == 0, "state": st.state_name(), "job": st.job_summary()}
+
+
+# ------------------------------------------------------------------ send a print
+# Kobra X LAN printing (community-documented, confirmed on firmware 2.0.2.8): upload the .gcode.3mf with an
+# HTTP multipart POST to the URL the printer's info report gives (fileUploadurl, port 18910, carries a one-time
+# token), then publish print/start naming the file and mapping each filament to a colour-unit slot.
+START_STATES = {"init", "checking", "downloading", "preheating", "auto_leveling", "printing", "hotbed_heating",
+                "nozzle_heating", "ace_filament_feeding", "nozzle_purging", "nozzle_wiping",
+                "z_offset_calibrating", "frequency_sweeping"}
+MAX_UPLOAD_BYTES = 512 * 1024 * 1024
+
+
+def read_job_file(path: Path) -> dict:
+    """What a sliced .gcode.3mf says about itself: printer model, time, weight and filaments per slot."""
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = set(z.namelist())
+            root = ET.fromstring(z.read("Metadata/slice_info.config"))
+    except (KeyError, zipfile.BadZipFile, ET.ParseError, OSError) as exc:
+        raise PrinterError(f"{path.name} isn't a sliced .gcode.3mf (no slice info).") from exc
+    plates = root.findall("plate")
+    if len(plates) != 1:
+        raise PrinterError(f"{path.name} has {len(plates)} plates; send a file with exactly one sliced plate.")
+    meta = {m.get("key"): m.get("value") for m in plates[0].findall("metadata")}
+    if f"Metadata/plate_{meta.get('index', '1')}.gcode" not in names:
+        raise PrinterError(f"{path.name} has no G-code inside; slice it first.")
+    fils = [{"index": int(f.get("id", "1")) - 1, "type": f.get("type") or "", "colour": (f.get("color") or "").upper(),
+             "used_g": float(f.get("used_g") or 0)} for f in plates[0].findall("filament")]
+    pred = int(float(meta.get("prediction") or 0))
+    return {"printer_model": meta.get("printer_model_id") or "", "time_s": pred,
+            "time": f"{pred // 3600}h {pred % 3600 // 60:02d}m", "weight_g": float(meta.get("weight") or 0),
+            "filaments": fils}
+
+
+def _rgb(hex_colour: str | None) -> list[int]:
+    h = (hex_colour or "").lstrip("#")
+    try:
+        return [int(h[i:i + 2], 16) for i in (0, 2, 4)]
+    except ValueError:
+        return [255, 255, 255]
+
+
+def _colour_distance(a: str | None, b: str | None) -> float:
+    return sum((x - y) ** 2 for x, y in zip(_rgb(a), _rgb(b))) ** 0.5
+
+
+def plan_slots(filaments: list[dict], boxes: list[dict], slots: list[int] | None) -> tuple[list[dict], list[str]]:
+    """Map each filament in the file to a slot of the printer's colour unit (1-based slots for people,
+    0-based ams_index for the printer). Picks by material, then nearest colour, unless slots are given."""
+    if len(boxes) != 1:
+        raise PrinterError("This printer reports " + (f"{len(boxes)} colour units" if boxes else "no colour unit") +
+                           "; sending is only supported with exactly one (the Kobra X's own unit or one ACE).")
+    box = boxes[0]
+    loaded = [s for s in box.get("slots", []) if s.get("state") != "empty"]
+    if slots is not None and len(slots) != len(filaments):
+        raise PrinterError(f"The file uses {len(filaments)} filament(s); give one slot for each.")
+    mapping, notes, used = [], [], set()
+    for i, f in enumerate(filaments):
+        if slots is not None:
+            want = int(slots[i])
+            slot = next((s for s in box.get("slots", []) if s.get("slot") == want), None)
+            if slot is None or slot.get("state") == "empty":
+                raise PrinterError(f"Slot {want} is empty or doesn't exist.")
+        else:
+            same = [s for s in loaded if str(s.get("material", "")).upper() == f["type"].upper() and s["slot"] not in used]
+            if not same:
+                raise PrinterError(f"No loaded slot has {f['type']} for filament {i + 1}. Load it, or pass slots=[...].")
+            slot = min(same, key=lambda s: _colour_distance(s.get("colour"), f["colour"]))
+        if str(slot.get("material", "")).upper() != f["type"].upper():
+            raise PrinterError(f"Slot {slot['slot']} has {slot.get('material')}, but filament {i + 1} was sliced as "
+                               f"{f['type']}. Re-slice with the right filament or load {f['type']}.")
+        if _colour_distance(slot.get("colour"), f["colour"]) > 60:
+            notes.append(f"Filament {i + 1} was sliced as {f['colour']} but slot {slot['slot']} holds {slot.get('colour')}.")
+        used.add(slot["slot"])
+        mapping.append({"filament": i + 1, "material": f["type"], "file_colour": f["colour"], "slot": slot["slot"],
+                        "slot_colour": slot.get("colour"), "slot_material": slot.get("material")})
+    return mapping, notes
+
+
+def _upload_url(host: str, urls: dict) -> str | None:
+    u = urls.get("fileUploadurl") or urls.get("fileUploadUrl")
+    if not isinstance(u, str) or not u.startswith("http"):
+        return None
+    p = urlparse(u)
+    return p._replace(scheme="http", netloc=f"{host}:{p.port or INFO_PORT}").geturl()  # only ever the printer itself
+
+
+def upload_job(url: str, path: Path, timeout: float = 300.0) -> str:
+    import httpx
+    size = path.stat().st_size
+    with open(path, "rb") as fh, httpx.Client(timeout=httpx.Timeout(timeout, connect=5.0), trust_env=False,
+                                               follow_redirects=False) as client:
+        r = client.post(url, data={"filename": path.name}, files={"gcode": (path.name, fh, "application/octet-stream")},
+                        headers={"X-File-Length": str(size)})
+    if r.status_code == 401:
+        raise PrinterError("The printer refused the upload token (401).")
+    try:
+        body = r.json()
+    except ValueError:
+        body = {}
+    if r.status_code != 200 or body.get("code") not in (200, "200"):
+        raise PrinterError(f"Upload failed (HTTP {r.status_code}, code {body.get('code')}: {body.get('message', '')}).")
+    return str((body.get("data") or {}).get("gcode") or path.name)
+
+
+def _start_payload(filename: str, mapping: list[dict], colours: dict[int, str]) -> dict:
+    return {"taskid": "-1", "filename": filename, "filepath": "/", "filetype": 1, "project_type": 1,
+            "file_key": "", "file_name": "", "task_settings": {"ai_detect": 0, "camera_timelapse": 0},
+            "ams_settings": {"use_ams": True, "ams_box_mapping": [
+                {"paint_index": m["filament"] - 1, "ams_index": m["slot"] - 1,
+                 "paint_color": _rgb(colours.get(m["filament"])), "ams_color": _rgb(m.get("slot_colour")),
+                 "material_type": m["material"]} for m in mapping]}}
+
+
+def send_job(host: str, path: Path, slots: list[int] | None, confirm: bool) -> dict:
+    """Upload a sliced .gcode.3mf and start it, only with confirm=True. Without it, return what would happen."""
+    if path.suffix.lower() != ".3mf" or not path.name.lower().endswith(".gcode.3mf"):
+        raise PrinterError("Send a sliced .gcode.3mf (slice_model writes one next to the .gcode).")
+    if not path.is_file():
+        raise PrinterError(f"{path} doesn't exist.")
+    if path.stat().st_size > MAX_UPLOAD_BYTES:
+        raise PrinterError(f"{path.name} is larger than {MAX_UPLOAD_BYTES // 2**20} MB.")
+    job = read_job_file(path)
+    with open_link(host) as link:
+        for t in ("info", "print", "status"):
+            link.send(t, "query")
+        link.send("multiColorBox", "getInfo")
+        link.wait_for(_have("info", "multiColorBox"), 8.0)
+        st = State(link.c.model_id)
+        for topic, msg in list(link.messages):
+            st.feed(topic, msg)
+        model = link.c.model or ""
+        if job["printer_model"] and model and model.lower() not in job["printer_model"].lower():
+            raise PrinterError(f"{path.name} was sliced for {job['printer_model']}, but this printer is a {model}.")
+        if st.info.get("state") not in ("free", None) or st.job:
+            raise PrinterError(f"The printer is busy ('{st.state_name()}'). Wait until it's idle.")
+        mapping, notes = plan_slots(job["filaments"], st.filament().get("boxes", []), slots)
+        preview = {"file": path.name, "size_mb": round(path.stat().st_size / 2**20, 1), "printer": model,
+                   "time_normal_mode": job["time"], "weight_g": job["weight_g"], "slots": mapping, "notes": notes}
+        if not confirm:
+            return {"started": False, "confirm_required": True, **preview,
+                    "will": "Upload this file to the printer and START printing it. The nozzle and bed heat up and the "
+                            "head moves as soon as it starts.",
+                    "check_first": ["the bed is empty and the build plate is seated flat",
+                                    "the right filament is in the slots shown"],
+                    "next": "Show this to the user and ask; on a clear yes call send_print again with confirm=True."}
+        url = _upload_url(host, st.urls)
+        if not url:
+            raise PrinterError("The printer didn't report an upload address. Check that LAN mode is on and try again.")
+        stored = upload_job(url, path)
+        colours = {f["index"] + 1: f["colour"] for f in job["filaments"]}
+        payload = _start_payload(stored, mapping, colours)
+        result: dict = {}
+        for role in ("web", "slicer"):
+            n = len(link.messages)
+            link.send("print", "start", payload, role=role)
+            link.wait_for(lambda msgs: any(msg_type(t, m) == "print" and (str(m.get("state")) in START_STATES or
+                                           m.get("state") in ("failed", "stoped")) for t, m in msgs[n:]), 25.0)
+            link.wait_for(lambda msgs: False, 6.0)  # an accepted start can still end a moment later (10111)
+            fresh = State(link.c.model_id)
+            for topic, msg in list(link.messages[n:]):
+                fresh.feed(topic, msg)
+            states = [str(m.get("state")) for t, m in link.messages[n:] if msg_type(t, m) == "print"]
+            errors = sorted(fresh.errors.values(), key=lambda e: e["code"])
+            started = bool(states) and states[-1] in START_STATES and not errors
+            result = {"started": started, **preview, "uploaded_as": stored, "topic": role,
+                      "printer_states": states[-6:], "errors": errors}
+            if started or not any(e["code"] == 10110 for e in errors):
+                break  # only retry on the other topic when the printer said the message itself was invalid
+        if not result.get("started"):
+            result["note"] = ("The printer didn't confirm the start. Check printer_status and the printer's screen "
+                              "before trying again; the file is already on the printer.")
+        return result
