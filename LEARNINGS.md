@@ -87,3 +87,7 @@ Some firmware wants the slicer topic instead of the web topic, so retry there on
 **A big flat PETG part can bend the spring-steel sheet off its magnet.** On a 244 × 244 × 10 mm slab, the part held on and pulled the sheet up. The nozzle then dragged into the raised edge and the printer reported a filament clog (11518). More adhesion doesn't help: a brim makes it worse. What helps is less shrinkage: a warmer bed (80 °C), little part cooling, fewer solid skins, and drafts kept off. Our diagnose tool's warping advice assumes the part peels off the bed, so it doesn't fit this case yet.
 
 **Check what a print actually used before comparing settings.** We first compared against the project guide's 25% infill, but the failed print had used the window's defaults (15% infill, 2 walls). The real change was smaller than it first looked.
+
+## Releasing
+
+**GitHub's macOS runners can run out.** Releasing 1.4.1, a macOS arm64 test job sat in the queue for 15 minutes three times running, and GitHub cancelled it each time ("not acquired by Runner of type hosted even after multiple attempts"). That cancelled the whole release, so nothing was published. The release now runs its own tests on Windows and Ubuntu and waits for the tests workflow to pass on the same commit, macOS included. A runner shortage now only delays a release; rerun the cancelled tests jobs, then the release's waiting job.

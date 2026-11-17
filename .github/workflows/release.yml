@@ -1,7 +1,7 @@
 name: release
 
 # Push a tag like v1.2.0 (matching the version in pyproject.toml) to publish:
-# tests -> build -> PyPI (trusted publishing, no token) -> GitHub Release + official MCP Registry (GitHub OIDC, no token).
+# tests (here on Windows and Ubuntu, macOS via the tests workflow) -> build -> PyPI (trusted publishing, no token) -> GitHub Release + official MCP Registry (GitHub OIDC, no token).
 on:
   push:
     tags: ["v*"]
@@ -15,7 +15,9 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [windows-latest, macos-latest]
+        # macOS is checked through the tests workflow below: GitHub's macOS arm64 runners are sometimes so scarce
+        # that a queued job is cancelled after 15 minutes, which used to cancel the whole release.
+        os: [windows-latest, ubuntu-latest]
         python: ["3.10", "3.13"]
     steps:
       - uses: actions/checkout@v4
@@ -25,8 +27,36 @@ jobs:
       - run: python -m pip install ".[test]"
       - run: python -m pytest -q
 
+  tests-workflow-passed:
+    # The tests workflow runs on every push, the tag included, on Windows and macOS. Wait for it to pass on this exact
+    # commit. If GitHub cancels its macOS jobs for lack of runners, rerun them there, then rerun this job.
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    timeout-minutes: 300
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Wait for the tests workflow on ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          while true; do
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?head_sha=$GITHUB_SHA&per_page=20" \
+                    --jq '[.workflow_runs[] | {status, conclusion, url: .html_url}]')"
+            echo "$runs"
+            if echo "$runs" | jq -e 'any(.[]; .conclusion == "success")' > /dev/null; then
+              echo "The tests workflow passed on this commit, macOS included."
+              exit 0
+            fi
+            if echo "$runs" | jq -e 'length > 0 and all(.[]; .status == "completed")' > /dev/null; then
+              echo "::error::The tests workflow didn't pass on this commit. Rerun its failed jobs, then rerun this job."
+              exit 1
+            fi
+            sleep 60
+          done
+
   build:
-    needs: test
+    needs: [test, tests-workflow-passed]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
