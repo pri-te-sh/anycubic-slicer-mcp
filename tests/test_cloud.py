@@ -37,6 +37,17 @@ DIALOG = [
     L("Inner wall", 1162, 151, 61), L("PLA", 1500, 589, 26),  # outside the dialog
 ]
 
+# A ready printer and a short task name, read with the slicer in full screen and Preview's line list beside the dialog.
+DIALOG_SHORT = [
+    L("Start Print", 763, 105, 77, 12), L("all", 1093, 121, 19), L("Printing task: first_layer_test /", 684, 147, 233, 19),
+    L("surface 2m50s", 1093, 144, 100), L("for Anycubic Kobra X", 544, 190, 133), L("3m 12s", 563, 297, 47, 12),
+    L("0))) 1.0g/0.35m", 540, 328, 93, 16), L("PETG", 572, 372, 40, 16), L("ation", 1095, 377, 40),
+    L("Color mapping mismatch may cause bleeding. Edit mapping or sync from ACE Pro.", 528, 428, 516, 16),
+    L("Please select a printer •", 528, 451, 182, 20), L("ing time: 3m11s", 1095, 479, 105, 18),
+    L("- Anycubic Kobra X", 537, 486, 133, 22), L("Bed leveling", 558, 557, 79, 16), L("Time-lapse", 558, 592, 75, 15),
+    L("Cancel", 888, 862, 44, 14), L("Start Print", 986, 861, 68, 16),
+]
+
 
 def test_workbench_is_read():
     d = cloud.parse_workbench(WORKBENCH)
@@ -124,3 +135,96 @@ def test_slicer_click_refuses_guarded_buttons_without_confirm(monkeypatch):
     assert not clicks
     out = click(text="Workbench")
     assert clicks and out[1]["done"]["clicked"]
+
+
+def test_title_bar_is_refused_unless_the_window_is_full_screen(monkeypatch):
+    """A windowed slicer has the macOS title bar in its top 30 pt; in full screen that bar is hidden and the
+    slicer's own tabs and Remote Print button sit there instead. Nothing real is clicked: Quartz is a fake."""
+    window = {"id": 1, "owner": "AnycubicSlicerNext", "pid": 1, "title": "", "x": 0.0, "y": 33.0, "w": 1512.0, "h": 949.0}
+    posted = []
+
+    class FakeQuartz:
+        kCGEventLeftMouseDown, kCGEventLeftMouseUp, kCGMouseButtonLeft = 1, 2, 0
+        kCGMouseEventClickState, kCGHIDEventTap = 0, 0
+
+        @staticmethod
+        def CGEventCreateMouseEvent(_src, kind, point, _button):
+            return (kind, point)
+
+        @staticmethod
+        def CGEventSetIntegerValueField(*_args):
+            pass
+
+        @staticmethod
+        def CGEventPost(_tap, event):
+            posted.append(event)
+
+    monkeypatch.setattr(win, "_accessibility_ok", lambda: True)
+    monkeypatch.setattr(win, "slicer_window", lambda install, front=True: window)
+    monkeypatch.setattr(win, "_windows_front_to_back", lambda: [window])
+    monkeypatch.setattr(win, "_quartz", lambda: FakeQuartz)
+    monkeypatch.setattr(win.time, "sleep", lambda _s: None)
+    workbench_tab = (894, 23)  # where full-screen Anycubic Slicer Next 2.0.0.3 draws its Workbench tab
+
+    monkeypatch.setattr(win, "_full_screen", lambda w: False)
+    with pytest.raises(win.WindowError, match="title bar"):
+        win.click(None, *workbench_tab, (1600, 1004))
+    assert not posted
+
+    monkeypatch.setattr(win, "_full_screen", lambda w: True)
+    out = win.click(None, *workbench_tab, (1600, 1004))
+    assert posted and out["clicked"] == [845, 55]
+
+
+def test_dialog_with_a_short_task_name_is_read_whole():
+    """The task label is centred with the name, so a short name moves it right; the dialog's edges come from its
+    title and Start Print button instead, and the line list beside the dialog stays out."""
+    d = cloud.parse_dialog(DIALOG_SHORT)
+    assert d["task"] == "first_layer_test" and d["time"] == "3m 12s" and d["sliced_for"] == "Anycubic Kobra X"
+    assert (d["weight_g"], d["length_m"]) == (1.0, 0.35) and d["filaments"] == ["PETG"]
+    assert d["warnings"] and "mismatch" in d["warnings"][0] and not d["no_printers"]
+    assert d["start_button"]["box"][1] == 861
+
+
+def test_camera_panel_button_and_picture_are_found(tmp_path):
+    """Panel bounds from the Workbench's real label positions; the play/stop button and a dark frame from a drawn
+    image. No window is involved."""
+    from PIL import Image, ImageDraw
+    items = [L("Camera", 265, 406, 63, 17), L("Material Management", 807, 405, 184, 22)]
+    panel = cloud.camera_panel(items)
+    assert panel == [247, 387, 530, 398]
+    assert cloud.camera_panel([L("Camera", 265, 406)]) is None
+    assert cloud.camera_panel([L("Camera", 267, 409, 60, 14), L("Control", 810, 101, 60, 18)])[2] == 531
+    x, y, w, h = panel
+    shot = tmp_path / "w.png"
+    im = Image.new("RGB", (1600, 1004), (30, 30, 30))
+    d = ImageDraw.Draw(im)
+    d.rectangle((x, y, x + w, y + h), fill=(0, 0, 0))
+    d.ellipse((x + 18, y + h - 48, x + 48, y + h - 18), fill=(40, 110, 240))  # blue play button
+    im.save(shot)
+    kind, point = cloud._stream_button(shot, panel)
+    assert kind == "play" and abs(point[0] - (x + 33)) <= 2 and abs(point[1] - (y + h - 33)) <= 2
+    assert cloud._frame_is_dark(shot, panel)
+    d.rectangle((x + 60, y + 40, x + w - 20, y + h - 60), fill=(150, 140, 120))  # a picture of the bed
+    d.ellipse((x + 18, y + h - 48, x + 48, y + h - 18), fill=(235, 50, 50))  # red stop button
+    im.save(shot)
+    assert cloud._stream_button(shot, panel)[0] == "stop" and not cloud._frame_is_dark(shot, panel)
+
+
+@pytest.mark.parametrize("line, status", [
+    ("Print Prepare: File Downloading... (0%)", "print prepare: file downloading... (0%)"),
+    ("Auto-leveling", "auto-leveling"), ("Nozzle purging", "nozzle purging"), ("Printing...", "printing"),
+])
+def test_job_stages_of_a_cloud_start_are_named(line, status):
+    """The stages a Kobra X went through after print_from_slicer, as the Workbench showed them."""
+    d = cloud.parse_workbench([L("Print task", 265, 105, 80), L(line, 265, 281, 200), L("0%", 263, 318, 20)])
+    assert d["job_status"] == status and d["progress_percent"] == 0
+
+
+def test_print_finished_card_is_reported():
+    """After a cloud print the slicer shows a Print Finished card over the Workbench, with a rating to submit."""
+    items = [L("Anycubic Kobra X", 52, 140, 102), L("Busy", 178, 140, 26), L("Print Finished", 665, 416, 110),
+             L("first_layer_test", 715, 476, 90), L("The print task is completed", 738, 527, 150),
+             L("Print Quality", 624, 588, 72), L("Submit", 992, 588, 44)]
+    n = cloud.parse_workbench(items)["notice"]
+    assert n["title"] == "Print Finished" and "The print task is completed" in n["lines"]

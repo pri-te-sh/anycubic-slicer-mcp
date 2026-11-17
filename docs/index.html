@@ -33,7 +33,7 @@
   "url": "https://pri-te-sh.github.io/anycubic-slicer-mcp/",
   "codeRepository": "https://github.com/pri-te-sh/anycubic-slicer-mcp",
   "license": "https://opensource.org/licenses/MIT",
-  "softwareVersion": "1.4.0",
+  "softwareVersion": "1.4.1",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Person", "name": "pcb", "url": "https://github.com/pri-te-sh" }
 }
@@ -104,7 +104,7 @@
    "name": "Can my agent see what the printer is doing?",
    "acceptedAnswer": {
     "@type": "Answer",
-    "text": "Yes, in either mode. With LAN mode on (on the printer: Settings > Network > LAN Mode), printer_status reports the state, temperatures, the filament in each slot, how the last print ended and any error code with Anycubic's meaning, and printer_camera_snapshot takes a photo with the built-in camera. With the printer on Anycubic Cloud, cloud_printer_status reads the same kind of thing from the slicer window's Workbench screen. A Kobra X can't do both: LAN mode switches off the cloud and the phone app's remote control."
+    "text": "Yes, in either mode. With LAN mode on (on the printer: Settings > Network > LAN Mode), printer_status reports the state, temperatures, the filament in each slot, how the last print ended and any error code with Anycubic's meaning, and printer_camera_snapshot takes a photo with the built-in camera. With the printer on Anycubic Cloud, cloud_printer_status reads the same kind of thing from the slicer window's Workbench screen and can take a picture with its camera. A Kobra X can't do both: LAN mode switches off the cloud and the phone app's remote control."
    }
   },
   {
@@ -826,7 +826,7 @@ saved     not yet (preview)</pre></div>
         <div>
           <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><circle cx="12" cy="10" r="2.5"/></svg></div>
           <h3>Send it. Then keep an eye on it.</h3>
-          <p>With LAN mode on, the agent talks to the printer directly: <code>printer_status</code> reads the state, temperatures, filament slots and any error code with Anycubic's meaning, <code>printer_camera_snapshot</code> looks at the bed, and <code>send_print</code> uploads and starts a file after checking the printer is idle and each filament matches its slot. Keep the printer on Anycubic Cloud instead and the agent goes through the slicer window you're signed in to: <code>cloud_printer_status</code> reads its Workbench and <code>print_from_slicer</code> uses its Start Print dialog. Starting, pausing and stopping always wait for your yes.</p>
+          <p>With LAN mode on, the agent talks to the printer directly: <code>printer_status</code> reads the state, temperatures, filament slots and any error code with Anycubic's meaning, <code>printer_camera_snapshot</code> looks at the bed, and <code>send_print</code> uploads and starts a file after checking the printer is idle and each filament matches its slot. Keep the printer on Anycubic Cloud instead and the agent goes through the slicer window you're signed in to: <code>cloud_printer_status</code> reads its Workbench and can look through its camera, and <code>print_from_slicer</code> uses its Start Print dialog. Starting, pausing and stopping always wait for your yes.</p>
           <div class="tools"><code>send_print</code><code>print_from_slicer</code><code>printer_status</code><code>cloud_printer_status</code><code>printer_camera_snapshot</code><code>control_print</code></div>
         </div>
         <div>
@@ -980,7 +980,7 @@ slots     PLA, PLA, PLA, PETG</pre></div>
         <dt>control_print</dt><dd>Pause, resume or stop the current print, after a preview and your yes.</dd>
       </dl></div>
       <div class="toolgroup reveal d1"><h3>Printer (Anycubic Cloud)</h3><dl>
-        <dt>cloud_printer_status</dt><dd>State, job, progress, temperatures, fan and slots, read from the slicer window's Workbench.</dd>
+        <dt>cloud_printer_status</dt><dd>State, job, progress, temperatures, fan and slots, read from the slicer window's Workbench, plus a camera picture of the bed if you ask.</dd>
         <dt>print_from_slicer</dt><dd>Starts the plate open in the slicer window through its Start Print dialog, after a preview and your yes.</dd>
       </dl></div>
       <div class="toolgroup reveal"><h3>Slicer window (macOS)</h3><dl>
@@ -1094,7 +1094,7 @@ slots     PLA, PLA, PLA, PETG</pre></div>
       <details><summary>Does it work with OrcaSlicer or Bambu Studio?</summary><p>Not yet. It drives Anycubic Slicer Next, which is built on OrcaSlicer. Support for other OrcaSlicer-based slicers would be a welcome contribution.</p></details>
       <details><summary>Which AI apps can use it?</summary><p>Anything that speaks the Model Context Protocol over stdio: Claude Code, Claude Desktop, Cursor, VS Code, Codex, Antigravity, DeepSeek Harness and others.</p></details>
       <details><summary>Do I need to keep the slicer window open?</summary><p>Not for slicing. The server runs the slicer from the command line in the background, using the printer, process and filament you last picked in the app, so open it once to choose them. The Anycubic Cloud tools and the window tools do need it open.</p></details>
-      <details><summary>Can my agent see what the printer is doing?</summary><p>Yes, in either mode. With LAN mode on (on the printer: Settings > Network > LAN Mode), <code>printer_status</code> reports the state, temperatures, the filament in each slot, how the last print ended and any error code with Anycubic's meaning, and <code>printer_camera_snapshot</code> takes a photo with the built-in camera. With the printer on Anycubic Cloud, <code>cloud_printer_status</code> reads the same kind of thing from the slicer window's Workbench screen. A Kobra X can't do both: LAN mode switches off the cloud and the phone app's remote control.</p></details>
+      <details><summary>Can my agent see what the printer is doing?</summary><p>Yes, in either mode. With LAN mode on (on the printer: Settings > Network > LAN Mode), <code>printer_status</code> reports the state, temperatures, the filament in each slot, how the last print ended and any error code with Anycubic's meaning, and <code>printer_camera_snapshot</code> takes a photo with the built-in camera. With the printer on Anycubic Cloud, <code>cloud_printer_status</code> reads the same kind of thing from the slicer window's Workbench screen and can take a picture with its camera. A Kobra X can't do both: LAN mode switches off the cloud and the phone app's remote control.</p></details>
       <details><summary>Does it work with Anycubic Cloud and the phone app?</summary><p>Yes, through the slicer window. Keep LAN mode off and stay signed in to Anycubic Slicer Next. <code>cloud_printer_status</code> reads the printer from the window's Workbench, and <code>print_from_slicer</code> starts the plate you sliced there through its Start Print dialog. The server never sees your Anycubic login. This works on macOS for now and needs Screen Recording and Accessibility permission for the app that runs the server.</p></details>
       <details><summary>Does it work on Linux?</summary><p>Not yet. It supports Windows and macOS. Pull requests for Linux are welcome.</p></details>
       <details><summary>My slicer is installed somewhere unusual.</summary><p>Set <code>ANYCUBIC_SLICER_EXE</code> to the slicer program and, if needed, <code>ANYCUBIC_SLICER_DATA</code> to its data folder, in your MCP client's config for this server.</p></details>

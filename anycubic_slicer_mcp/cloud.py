@@ -23,12 +23,15 @@ from .install import Install
 MATERIALS = {"pla", "pla+", "petg", "pet", "abs", "asa", "tpu", "pa", "pc", "pva", "hips", "pla-cf", "petg-cf",
              "pa-cf", "silk", "matte"}
 PRINTER_STATES = {"busy", "idle", "free", "online", "offline", "printing", "paused", "ready", "error", "standby"}
-JOB_STATUS = re.compile(r"^(printing|paused|pausing|preparing|heating|preheating|leveling|levelling|downloading|"
-                        r"uploading|completed|complete|finished|failed|cancell?ed|stopped|resuming)\b", re.IGNORECASE)
+JOB_STATUS = re.compile(r"^(print prepare|auto-?level+ing|nozzle purging|nozzle cleaning|printing|paused|pausing|"
+                        r"preparing|heating|preheating|leveling|levelling|downloading|uploading|completed|complete|"
+                        r"finished|failed|cancell?ed|stopped|resuming)\b", re.IGNORECASE)
 TEMPS = re.compile(r"(-?\d+)\s*°?\s*C?\s*/\s*(-?\d+)")
 TIME = re.compile(r"^(?:\d+d\s*)?(?:\d+h\s*)?\d+m(?:\s*\d+s)?$|^\d+s$")
 WEIGHT = re.compile(r"([\d.]+)\s*g\s*/\s*([\d.]+)\s*m")
+NOTICES = {"print finished", "print failed", "print completed", "print stopped"}
 SHOT = Path(tempfile.gettempdir()) / "acmcp-slicer-window.png"
+CAMERA = Path(tempfile.gettempdir()) / "acmcp-cloud-camera.png"
 
 
 # ------------------------------------------------------------------ reading
@@ -117,6 +120,13 @@ def parse_workbench(items: list[dict[str, Any]]) -> dict[str, Any]:
         out["slots"] = slots
         if len(slots) < 4:
             out["slots_note"] = "Fewer than 4 slots read; numbering may be off. Check the screenshot."
+    notice = _label(items, lambda v: v in NOTICES)
+    if notice:
+        nx, ny = notice["box"][0], notice["box"][1]
+        lines = [i["text"].strip() for i in items if -10 <= i["box"][1] - ny <= 140 and -60 <= i["box"][0] - nx <= 400]
+        out["notice"] = {"title": notice["text"].strip(), "lines": lines[:6],
+                         "note": "A card from the slicer covers part of the Workbench, and while it's open the window "
+                                 "ignores clicks elsewhere. It asks for a rating, so ask the user to close it."}
     return out
 
 
@@ -134,10 +144,19 @@ def dialog_items(items: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
     if not task or not cancel:
         return None
     button = max(starts, key=lambda i: i["box"][1]) if starts else None
+    title = min(starts, key=lambda i: i["box"][1]) if len(starts) > 1 else None
     bottom = max(c["box"][1] + c["box"][3] for c in cancel)
-    left = task["box"][0] - 80
-    right = (button["box"][0] + button["box"][2] + 80) if button else task["box"][0] + 700
-    top = task["box"][1] - 10
+    if button and title and title["box"][1] < task["box"][1]:
+        # The title is centred and the Start Print button sits at the right edge, so together they give both edges.
+        # The task label isn't a safe left edge: it's centred with the task name, so a short name moves it right.
+        cx = title["box"][0] + title["box"][2] / 2
+        right = button["box"][0] + button["box"][2] + 20
+        left = 2 * cx - right - 10
+        top = title["box"][1] - 10
+    else:
+        left = task["box"][0] - 260
+        right = (button["box"][0] + button["box"][2] + 20) if button else task["box"][0] + 700
+        top = task["box"][1] - 10
     return [i for i in items if left <= i["box"][0] <= right and top <= i["box"][1] <= bottom + 5]
 
 
@@ -151,13 +170,14 @@ def parse_dialog(items: list[dict[str, Any]]) -> dict[str, Any]:
     if not name and task:
         right = [i for i in d if abs(i["box"][1] - task["box"][1]) <= 8 and i["box"][0] > task["box"][0]]
         name = min(right, key=lambda i: i["box"][0])["text"] if right else ""
-    out["task"] = name or None
+    out["task"] = re.sub(r"\s+\W$", "", name).strip() or None  # the pencil icon after the name reads as " /"
     sliced_for = next((i["text"] for i in d if win.norm(i["text"]).startswith("for ")), None)
     out["sliced_for"] = sliced_for[4:].strip() if sliced_for else None
     out["time"] = next((i["text"].strip() for i in d if TIME.match(i["text"].strip())), None)
     w = next((WEIGHT.search(i["text"]) for i in d if WEIGHT.search(i["text"])), None)
     out["weight_g"], out["length_m"] = (float(w.group(1)), float(w.group(2))) if w else (None, None)
     out["filaments"] = [i["text"].strip() for i in d if win.norm(i["text"]) in MATERIALS]
+    out["warnings"] = [i["text"].strip() for i in d if "mismatch" in win.norm(i["text"])]
     out["no_printers"] = win.has(d, "no available printers")
     status_words = PRINTER_STATES | {"disconnected", "connected", "connecting"}
     out["printer_status"] = next((win.norm(i["text"]) for i in d if win.norm(i["text"]) in status_words), None)
@@ -171,13 +191,18 @@ def parse_dialog(items: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def _pixels(img) -> list:
+    """Pixel values in row order (Pillow 12 renamed getdata to get_flattened_data)."""
+    return list(getattr(img, "get_flattened_data", img.getdata)())
+
+
 def button_enabled(image: Path, box: list[int]) -> bool | None:
     """A disabled Start Print button is pale; an enabled one is saturated blue. None if it can't tell."""
     try:
         from PIL import Image
         with Image.open(image) as im:
             x, y, w, h = box
-            px = list(im.convert("RGB").crop((x - 20, y - 4, x + w + 20, y + h + 4)).getdata())
+            px = _pixels(im.convert("RGB").crop((x - 20, y - 4, x + w + 20, y + h + 4)))
     except Exception:  # noqa: BLE001
         return None
     if not px:
@@ -217,6 +242,76 @@ def workbench(install: Install) -> tuple[dict[str, Any], list[dict[str, Any]], d
         data["note"] = ("No cloud printer is listed. If the printer's LAN mode is on, it isn't on Anycubic Cloud: use "
                         "printer_status instead. Otherwise check the slicer is signed in to the account the printer is bound to.")
     return meta, items, {**data, "text": win.compact(items)}
+
+
+def camera_panel(items: list[dict[str, Any]]) -> list[int] | None:
+    """The Workbench's camera panel as [x, y, w, h] in screenshot pixels: from the "Camera" heading to the column
+    where Material Management starts, with the stream's 4:3 shape."""
+    head = _label(items, lambda v: v == "camera")
+    # The column to its right starts at Material Management, or at Control above it when a card covers that heading.
+    side = _label(items, lambda v: v.startswith("material management")) or _label(items, lambda v: v == "control")
+    if not head or not side or side["box"][0] <= head["box"][0] + 100:
+        return None
+    left, top = head["box"][0] - 18, head["box"][1] - 19
+    w = side["box"][0] - 30 - left
+    return [left, top, w, round(w * 0.75)]
+
+
+def _stream_button(image: Path, panel: list[int]) -> tuple[str, tuple[int, int]] | None:
+    """The play/stop button in the panel's bottom-left corner: ("play", point) when it's blue, ("stop", point) when
+    it's red, None when neither shows."""
+    from PIL import Image
+    x, y, _, h = panel
+    with Image.open(image) as im:
+        corner = im.convert("RGB").crop((x, y + h - 80, x + 80, y + h))
+        px = [(i % 80, i // 80, p) for i, p in enumerate(_pixels(corner))]
+    for kind, test in (("play", lambda p: p[2] - p[0] > 90 and p[2] > 180),
+                       ("stop", lambda p: p[0] - p[2] > 90 and p[0] > 180)):
+        hits = [(cx, cy) for cx, cy, p in px if test(p)]
+        if len(hits) > 40:
+            return kind, (x + sum(c[0] for c in hits) // len(hits), y + h - 80 + sum(c[1] for c in hits) // len(hits))
+    return None
+
+
+def _frame_is_dark(image: Path, panel: list[int]) -> bool:
+    from PIL import Image
+    x, y, w, h = panel
+    with Image.open(image) as im:
+        inner = im.convert("L").crop((x + w // 6, y + h // 6, x + w * 5 // 6, y + h * 5 // 6))
+        px = _pixels(inner)
+    return sum(1 for p in px if p < 25) > 0.85 * len(px)
+
+
+def camera_frame(install: Install, meta: dict, items: list[dict[str, Any]], wait_s: float = 25.0,
+                 leave_running: bool = False) -> dict[str, Any]:
+    """Start the Workbench camera stream if it's stopped, wait for a picture and save the panel to CAMERA. Stops the
+    stream again if it started it, unless leave_running. Only ever clicks the panel's own play/stop button."""
+    panel = camera_panel(items)
+    if not panel:
+        raise win.WindowError("No camera panel on the Workbench screen. Look at the screenshot.")
+    button = _stream_button(SHOT, panel)
+    started = False
+    if button and button[0] == "play":
+        win.click(install, *button[1], tuple(meta["image_size"]))
+        started = True
+    end = time.monotonic() + wait_s
+    while True:
+        meta, items = capture(install)
+        panel = camera_panel(items) or panel
+        if not _frame_is_dark(SHOT, panel) or time.monotonic() >= end:
+            break
+        time.sleep(2.0)
+    from PIL import Image
+    with Image.open(SHOT) as im:
+        x, y, w, h = panel
+        im.crop((x, y, x + w, y + h)).save(CAMERA)
+    out = {"image": str(CAMERA), "stream_started": started, "dark": _frame_is_dark(SHOT, panel)}
+    if started and not leave_running:
+        button = _stream_button(SHOT, panel)
+        if button and button[0] == "stop":
+            win.click(install, *button[1], tuple(meta["image_size"]))
+            out["stream_stopped"] = True
+    return out
 
 
 def _open_dialog(install: Install, wait_s: float = 90.0) -> tuple[dict, list]:
@@ -263,6 +358,9 @@ def print_from_slicer(install: Install, confirm: bool, expected: dict[str, Any] 
                         "in LAN mode (then use send_print), offline, or bound to another account.")
     if d.get("printer_status") in ("busy", "printing", "paused", "offline", "disconnected", "error"):
         problems.append(f"The printer shows as {d['printer_status']}.")
+    if not d.get("time"):
+        problems.append("The print time couldn't be read from the dialog, so the start can't be checked against the "
+                        "preview. Look at the screenshot.")
     btn = d.get("start_button")
     enabled = button_enabled(SHOT, btn["box"]) if btn else None
     if btn is None:

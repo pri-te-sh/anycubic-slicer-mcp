@@ -147,7 +147,7 @@ def _windows_front_to_back() -> list[dict[str, Any]]:
             continue
         b = w.get("kCGWindowBounds") or {}
         out.append({"id": int(w["kCGWindowNumber"]), "owner": str(w.get("kCGWindowOwnerName", "")),
-                    "title": str(w.get("kCGWindowName") or ""),
+                    "pid": int(w.get("kCGWindowOwnerPID", 0)), "title": str(w.get("kCGWindowName") or ""),
                     "x": float(b.get("X", 0)), "y": float(b.get("Y", 0)),
                     "w": float(b.get("Width", 0)), "h": float(b.get("Height", 0))})
     return out
@@ -164,7 +164,14 @@ def slicer_window(install: Install, front: bool = True) -> dict[str, Any]:
         raise WindowError("Anycubic Slicer Next isn't running. Open it with open_in_slicer or restart_slicer.")
     if front:
         bring_to_front(install)
-    wins = [w for w in _windows_front_to_back() if _is_slicer(w) and w["w"] > 200 and w["h"] > 200]
+    # A full-screen slicer lives on its own Space; switching there animates for about a second, and until it ends
+    # the window isn't on screen. Wait for it rather than guess.
+    deadline = time.monotonic() + (4.0 if front else 0.0)
+    while True:
+        wins = [w for w in _windows_front_to_back() if _is_slicer(w) and w["w"] > 200 and w["h"] > 200]
+        if wins or time.monotonic() >= deadline:
+            break
+        time.sleep(0.25)
     if not wins:
         raise WindowError("The slicer has no window on this screen. It may be minimised or on another Space.")
     return max(wins, key=lambda w: w["w"] * w["h"])
@@ -177,8 +184,15 @@ def screenshot(install: Install, out: Path, max_px: int = 1600, ocr: bool = Fals
     items: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="acmcp-shot-") as tmp:
         raw = Path(tmp) / "w.png"
-        r = subprocess.run(["screencapture", "-x", "-o", "-l", str(win["id"]), str(raw)], capture_output=True, text=True)
-        if r.returncode != 0 or not raw.is_file():
+        for attempt in range(2):  # a capture taken while a dialog opens can fail once; look the window up again
+            if attempt:
+                time.sleep(0.8)
+                win = slicer_window(install)
+            r = subprocess.run(["screencapture", "-x", "-o", "-l", str(win["id"]), str(raw)], capture_output=True,
+                               text=True)
+            if r.returncode == 0 and raw.is_file():
+                break
+        else:
             raise WindowError("macOS refused the screenshot. Give the app running this server Screen Recording "
                               "permission (System Settings > Privacy & Security > Screen Recording), then restart it.")
         from PIL import Image
@@ -210,6 +224,31 @@ def _accessibility_ok() -> bool:
     return bool(AXIsProcessTrusted())
 
 
+def _full_screen(win: dict[str, Any]) -> bool:
+    """True only when macOS says this window is in full screen. Then its title bar is hidden above the window and
+    the slicer's own tabs and buttons start at the window's top edge. Any doubt counts as not full screen, which
+    keeps the title-bar refusal."""
+    try:
+        from ApplicationServices import (
+            AXUIElementCopyAttributeValue,
+            AXUIElementCreateApplication,
+            AXValueGetValue,
+            kAXValueCGPointType,
+            kAXValueCGSizeType,
+        )
+        err, wins = AXUIElementCopyAttributeValue(AXUIElementCreateApplication(win["pid"]), "AXWindows", None)
+        for w in (wins or []) if err == 0 else []:
+            pos = AXValueGetValue(AXUIElementCopyAttributeValue(w, "AXPosition", None)[1], kAXValueCGPointType, None)[1]
+            size = AXValueGetValue(AXUIElementCopyAttributeValue(w, "AXSize", None)[1], kAXValueCGSizeType, None)[1]
+            same = (abs(pos.x - win["x"]) < 2 and abs(pos.y - win["y"]) < 2
+                    and abs(size.width - win["w"]) < 2 and abs(size.height - win["h"]) < 2)
+            if same:
+                return AXUIElementCopyAttributeValue(w, "AXFullScreen", None)[1] is True
+    except Exception:  # noqa: BLE001 - no pyobjc, no permission or an odd window: keep the refusal
+        return False
+    return False
+
+
 def click(install: Install, x: float, y: float, image_size: tuple[int, int], double: bool = False) -> dict[str, Any]:
     """Click at (x, y) in the last screenshot's pixels. Refuses points outside the slicer window, and refuses
     unless the slicer's window is the frontmost window, so a click can never land in another app."""
@@ -221,7 +260,7 @@ def click(install: Install, x: float, y: float, image_size: tuple[int, int], dou
     if not (0 <= x < iw and 0 <= y < ih):
         raise WindowError(f"({x}, {y}) is outside the {iw}x{ih} screenshot.")
     sx, sy = win["x"] + x * win["w"] / iw, win["y"] + y * win["h"] / ih
-    if sy - win["y"] < TITLE_BAR_PT:
+    if sy - win["y"] < TITLE_BAR_PT and not _full_screen(win):
         raise WindowError("That point is in the window's title bar (close, minimise and full-screen buttons); "
                           "clicks there are refused.")
     top = next(iter(_windows_front_to_back()), None)

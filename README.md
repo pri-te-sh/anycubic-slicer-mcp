@@ -98,7 +98,7 @@ A Kobra X runs either in LAN mode or on Anycubic Cloud, not both: with LAN mode 
 
 **Anycubic Cloud** (LAN mode off, so the phone app keeps working). Anycubic doesn't publish a cloud API, so the server goes through the slicer window, which is already signed in to your account. The server never sees your login.
 
-- `cloud_printer_status` reads the window's Workbench screen: state, job, progress, layer, time left, temperatures, part fan, firmware and the loaded slots, plus a screenshot.
+- `cloud_printer_status` reads the window's Workbench screen: state, job, progress, layer, time left, temperatures, part fan, firmware and the loaded slots, plus a screenshot. With `camera=True` it also starts the Workbench camera and returns a picture of the bed, then stops the stream again.
 - `print_from_slicer` opens the window's Start Print dialog for the plate you sliced there and reads it back: task, time, weight, filament, printer and whether it can take the job. It presses Start Print only after you confirm, and only if the dialog still shows the same plate.
 
 Starting, pausing, resuming and stopping always go in two steps: the tool previews what it will do, the agent asks you, and it acts only after you say yes in the chat.
@@ -108,7 +108,7 @@ Tested on a Kobra X with firmware 2.0.2.8 and Anycubic Slicer Next 2.0.0.3 on ma
 | | Tested on the real printer | Not yet tested on the real printer |
 |---|---|---|
 | LAN mode | finding it, status, camera, the `send_print` preview, refusing PETG into a PLA slot, refusing to pause an idle printer | the actual upload and start; pause, resume and stop (tested against a simulated printer) |
-| Anycubic Cloud | reading a live print from the Workbench, reading the Start Print dialog, refusing to start while the printer is busy | the actual start; pausing or ending from the Workbench |
+| Anycubic Cloud | reading a live print from the Workbench, the camera, reading the Start Print dialog, refusing to start while the printer is busy, starting a first-layer test and following it through download, levelling and printing to the end | pausing or ending from the Workbench |
 
 ### Drive the slicer window
 

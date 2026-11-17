@@ -1084,18 +1084,31 @@ def slicer_click(
 @mcp.tool(title="Cloud printer status (through the slicer window)",
           annotations=_ann("Cloud printer status (through the slicer window)", open_world=True))
 @threaded
-def cloud_printer_status() -> list:
+def cloud_printer_status(
+    camera: Annotated[bool, Field(description="Also start the Workbench camera and return a frame of the bed, e.g. to check it's empty before a print or to look at a running one. The stream is stopped again afterwards if this call started it.")] = False,
+) -> list:
     """Read a printer that's on Anycubic Cloud (LAN mode off) from the slicer window's Workbench screen.
 
     Use it instead of printer_status when the printer's LAN mode is off, or when printer_status can't reach it. It
     switches the window to Workbench > Cloud Printer and reads it: printer and state (busy, idle, offline), job name,
     status and progress, layer, time left and total, estimated finish, nozzle and bed temperatures and targets, part
     fan, speed mode, firmware and the loaded slots. Returns the screenshot too: read values off it when a field is
-    missing. Changes nothing on the printer; it only switches the window's tab. macOS only, needs the slicer open and
+    missing. With camera=True it also presses the camera panel's play button and returns a frame of the bed, the
+    cloud counterpart of printer_camera_snapshot. Changes nothing on the printer; it only switches the window's tab
+    and, with camera, starts and stops the stream. macOS only, needs the slicer open and
     signed in, plus Screen Recording and Accessibility permission for the app running this server."""
     meta, items, data = cloud.workbench(INSTALL)
+    shot = cloud.SHOT.read_bytes()
+    out: list = [Image(data=shot, format="png")]
+    if camera:
+        cam = cloud.camera_frame(INSTALL, meta, items)
+        data["camera"] = {k: v for k, v in cam.items() if k != "image"}
+        if cam["dark"]:
+            data["camera"]["note"] = "The stream showed no picture in time. The printer may be off or its camera busy."
+        out.append(Image(data=cloud.CAMERA.read_bytes(), format="png"))
+        meta, items = cloud.capture(INSTALL)
     _remember(meta, items)
-    return [Image(data=cloud.SHOT.read_bytes(), format="png"), json.dumps(data)]
+    return [*out, json.dumps(data)]
 
 
 @mcp.tool(title="Print through the slicer window (Anycubic Cloud)",

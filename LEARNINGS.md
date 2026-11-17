@@ -68,6 +68,18 @@ Some firmware wants the slicer topic instead of the web topic, so retry there on
 
 **The dialog's task name changes every time it opens.** The window prefixes it with `MMDD-HHMM-NN_`. Matching the previewed print against the confirmed one ignores that prefix and compares the rest plus the time.
 
+**In full screen the window has no title bar.** The click guard refused every click in the window's top 30 pt, where a windowed slicer has the close and minimise buttons. In full screen macOS hides that bar above the window, and the slicer's tabs and Remote Print button sit in those 30 pt instead, so every cloud tool was refused. The guard now asks macOS (`AXFullScreen`) and drops the title-bar refusal only when the answer is yes.
+
+**A full-screen window lives on its own Space.** Bringing it forward animates for about a second, and a capture taken during the switch fails. That failure surfaced as a missing Screen Recording permission, which was wrong. The window lookup now waits until the window is on screen, and a failed capture is retried once.
+
+**Don't take a dialog's edges from a centred label.** The Start Print dialog centres the task label with the task name, so a short name like `first_layer_test` moved it right and the parser lost the time, weight and filament to its left. The dialog's title and its Start Print button give both edges.
+
+**A cloud start goes through several stages before it prints.** The Kobra X showed Print Prepare: File Downloading, heating, Auto-leveling (nozzle at 140 °C) and Nozzle purging, then Printing. A 3 min 12 s first-layer test took 14 minutes from pressing Start Print to Free.
+
+**The camera works over the cloud too.** The Workbench has a camera panel with a play button. The stream showed a picture within about 5 seconds.
+
+**After a print the slicer shows a Print Finished card that blocks the window.** While it's open, clicks elsewhere in the window do nothing. It asks for a star rating, so the tools report it and leave it to the user to close.
+
 **The printer keeps its own time estimate.** The window's slice said 8 h 55 m, while the Workbench showed 6 h 2 m total at 37%, then 8 h 38 m an hour later. Don't quote the Workbench total as the job's length.
 
 ## Printing what we sliced
