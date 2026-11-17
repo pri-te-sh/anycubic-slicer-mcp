@@ -54,6 +54,22 @@ Notes from building and running anycubic-slicer-mcp against a real Kobra X (firm
 
 Some firmware wants the slicer topic instead of the web topic, so retry there only after error 10110. These details are community-documented: see the Nino6689/anycubic-lan and printer-protocol-orchard notes. Code from GPL projects was never copied.
 
+## The printer on Anycubic Cloud
+
+**LAN mode and the cloud exclude each other.** Anycubic's Kobra X guide says so: with LAN mode on, the cloud service and the phone app's remote control stop. With LAN mode off, the printer closes port 18910 too, so none of the LAN tools can reach it. Users who want the phone app keep LAN mode off.
+
+**Go through the slicer window, not the cloud API.** Anycubic doesn't publish a cloud API. The community clients reverse-engineered it, need the account token the slicer stores, and the main one is GPL. The slicer window is already signed in, so `cloud_printer_status` and `print_from_slicer` read and press its screens, and the server never sees the login.
+
+**Read the window at full resolution.** OCR on the Retina capture (3024 px wide) took 0.2 s and found every slot label. On the 1600 px copy it took longer and missed one of four. Boxes are scaled down to the image the agent sees afterwards.
+
+**Icons come through OCR as letters.** The Workbench's controls read as `a Skip | 1l Pause | • End`, one line. The click guard splits such rows and works out which part is under the point, so a click on Pause is caught even though OCR never saw "Pause" on its own.
+
+**The Start Print dialog hides a busy printer.** During a cloud print the Workbench lists the printer as Busy, while the dialog says "No available printers found" and "Disconnected", with Start Print greyed out. A greyed button is told apart from an enabled one by colour (pale versus saturated blue).
+
+**The dialog's task name changes every time it opens.** The window prefixes it with `MMDD-HHMM-NN_`. Matching the previewed print against the confirmed one ignores that prefix and compares the rest plus the time.
+
+**The printer keeps its own time estimate.** The window's slice said 8 h 55 m, while the Workbench showed 6 h 2 m total at 37%, then 8 h 38 m an hour later. Don't quote the Workbench total as the job's length.
+
 ## Printing what we sliced
 
 **A big flat PETG part can bend the spring-steel sheet off its magnet.** On a 244 × 244 × 10 mm slab, the part held on and pulled the sheet up. The nozzle then dragged into the raised edge and the printer reported a filament clog (11518). More adhesion doesn't help: a brim makes it worse. What helps is less shrinkage: a warmer bed (80 °C), little part cooling, fewer solid skins, and drafts kept off. Our diagnose tool's warping advice assumes the part peels off the bed, so it doesn't fit this case yet.

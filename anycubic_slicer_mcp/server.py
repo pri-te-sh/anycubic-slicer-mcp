@@ -18,6 +18,7 @@ from pydantic import Field
 
 from . import __version__
 from . import analysis, calibration, doctor, gcode as gc, materials, optimize, printer as lan, project, render
+from . import cloud
 from . import window as win
 from .install import find_install, state_dir
 from .inventory import Inventory
@@ -41,19 +42,28 @@ Anycubic Slicer Next, headless. Typical flows:
   again with plan_id and the answers → show the plates and get the user's OK → slice_project. Never answer a
   question for the user or slice while one is open. If you have your own doubts (which spool, which parts matter
   most), ask those too.
-- Live printer (opt-in, LAN mode only): find_printers → printer_status (state, job, temperatures, errors with their
-  meaning, loaded filament and ACE slots) → printer_camera_snapshot to look at the print. Use them to triage a failed or
-  paused print together with diagnose_print. control_print pauses, resumes or stops a print: call it without confirm
-  first, tell the user exactly what will happen, and only call it with confirm=True after they say yes in this
-  conversation. Never stop a print on your own judgement.
-- Send a print (LAN mode): slice → preview_gcode → show the user → send_print without confirm (it checks the printer
-  is idle and maps each filament to a loaded slot) → tell the user what will happen and ask them to check the bed is
-  empty → send_print with confirm=True only after they say yes in this conversation. Never send on your own initiative.
+- Live printer, two ways. The Kobra X family runs either in LAN mode or on Anycubic Cloud, never both; ask the user
+  which if unsure (find_printers finds nothing when LAN mode is off).
+  LAN mode: find_printers → printer_status (state, job, temperatures, errors with their meaning, loaded slots) →
+  printer_camera_snapshot. control_print pauses, resumes or stops a print. send_print uploads and starts a file.
+  Cloud (LAN mode off, the phone app keeps working): everything goes through the slicer window, which is signed in
+  to the user's account. cloud_printer_status reads its Workbench screen; print_from_slicer starts the plate open in
+  the window through its Start Print dialog. Pause/stop on cloud: slicer_click on the Workbench's Pause or End,
+  which needs confirm.
+  Use them to triage a failed or paused print together with diagnose_print.
+- Anything that starts, pauses, resumes or stops a print (send_print, print_from_slicer, control_print, slicer_click
+  with confirm): call it without confirm first, tell the user exactly what will happen and ask them to check the bed
+  when starting one, and only confirm after an explicit yes in this conversation. Never on your own initiative.
+- Send a print: slice → preview_gcode → show the user → LAN: send_print. Cloud: restart_slicer with open_path and the
+  same presets, slice in the window (slicer_click text='Slice plate'), check the window's time matches yours, then
+  print_from_slicer.
 - Slicer window: open_in_slicer shows a file; restart_slicer reopens the window with chosen presets selected (and makes
-  it load newly saved presets); slicer_screenshot shows you the window; slicer_click clicks inside it (macOS, needs the
-  user's Accessibility permission). Use them when the user wants to see or do something in the window itself.
-Never claim a print is safe without the user checking the preview. Nothing is sent to a printer except send_print,
-control_print's pause, resume and stop, and the camera start/stop of printer_camera_snapshot, each as described above.
+  it load newly saved presets); slicer_screenshot shows you the window and its text; slicer_click clicks a button by
+  its text (macOS, needs the user's Accessibility permission). Use them when the user wants to see or do something
+  in the window itself.
+Never claim a print is safe without the user checking the preview. Nothing reaches a printer except send_print,
+control_print, the camera start/stop of printer_camera_snapshot, print_from_slicer and confirmed slicer_click
+presses, each as described above.
 """
 
 mcp = FastMCP("anycubic-slicer", instructions=INSTRUCTIONS)
@@ -961,14 +971,20 @@ def send_print(
 
 
 # ======================================================================== slicer window
-_LAST_SHOT: dict[str, tuple[int, int]] = {}
+_LAST_SHOT: dict[str, Any] = {}
+_LAST_CLOUD_PREVIEW: dict[str, Any] = {}
 
 
-def _window_shot() -> list:
-    out = Path(tempfile.gettempdir()) / "acmcp-slicer-window.png"
-    meta = win.screenshot(INSTALL, out)
-    _LAST_SHOT["size"] = tuple(meta["image_size"])
-    return [Image(data=out.read_bytes(), format="png"), json.dumps(meta)]
+def _remember(meta: dict, items: list) -> None:
+    _LAST_SHOT.update(size=tuple(meta["image_size"]), items=items)
+
+
+def _window_shot(extra: dict | None = None) -> list:
+    meta, items = cloud.capture(INSTALL)
+    _remember(meta, items)
+    meta = {**meta, "text": win.compact(items), **(extra or {})}
+    meta.pop("image", None)
+    return [Image(data=cloud.SHOT.read_bytes(), format="png"), json.dumps(meta)]
 
 
 @mcp.tool(title="Restart the slicer window", annotations=_ann("Restart the slicer window", destructive=True, idempotent=False))
@@ -1015,35 +1031,101 @@ def restart_slicer(
 @mcp.tool(title="Screenshot the slicer window", annotations=_ann("Screenshot the slicer window", read_only=True))
 @threaded
 def slicer_screenshot() -> list:
-    """Bring the Anycubic Slicer Next window to the front and return a picture of just that window.
+    """Bring the Anycubic Slicer Next window to the front and return a picture of just that window, plus its text.
 
     Use it to see what the user sees: which presets are selected, the sliced time and weight, a dialog that's waiting
-    for an answer. Its pixel coordinates are what slicer_click takes. macOS only for now; needs Screen Recording
-    permission for the app running this server."""
+    for an answer. The text list gives each line read from the window as [text, x, y] in the image's pixels, which is
+    what slicer_click takes. macOS only for now; needs Screen Recording permission for the app running this server."""
     return _window_shot()
 
 
 @mcp.tool(title="Click in the slicer window", annotations=_ann("Click in the slicer window", destructive=True, idempotent=False))
 @threaded
 def slicer_click(
-    x: Annotated[float, Field(description="X in pixels of the latest slicer_screenshot image.")] = 0,
-    y: Annotated[float, Field(description="Y in pixels of the latest slicer_screenshot image.")] = 0,
+    text: Annotated[str | None, Field(description="Click the button or label with this text, e.g. 'Preview' or 'Cancel'. Preferred over x/y.")] = None,
+    occurrence: Annotated[int | None, Field(description="Which match to click when the text appears more than once, 1 = first in reading order.")] = None,
+    x: Annotated[float | None, Field(description="Or: X in pixels of the latest slicer_screenshot image.")] = None,
+    y: Annotated[float | None, Field(description="Or: Y in pixels of the latest slicer_screenshot image.")] = None,
     double: Annotated[bool, Field(description="Double-click instead of a single click.")] = False,
     key: Annotated[str | None, Field(description="Instead of clicking, press one key: return, escape, tab, space or delete.")] = None,
+    confirm: Annotated[bool, Field(description="Needed to click a button that prints, sends, pauses, stops, deletes or discards (e.g. 'Start Print', 'End', 'No' in a save dialog). Set True only after the user said yes to that exact click in this conversation.")] = False,
 ) -> list:
-    """Click (or press one key) in the Anycubic Slicer Next window, then return a fresh screenshot of it.
+    """Click a button by its text (or at a point, or press one key) in the Anycubic Slicer Next window, then return a
+    fresh screenshot and text of it.
 
-    Take slicer_screenshot first and click on what you can see in it. Clicks only land inside the slicer's window and
-    only when it's the frontmost window. Don't click anything that prints, sends, deletes or overwrites unless the user
-    asked for exactly that in this conversation. macOS only; needs Accessibility permission for the app running this
-    server, which is the user's decision."""
+    Take slicer_screenshot first. Clicks only land inside the slicer's window, only when it's the frontmost window,
+    and never in its title bar. Buttons that start, send, pause, stop, delete or discard something are refused unless
+    confirm=True, which needs the user's explicit yes to that click. macOS only; needs Accessibility permission for the
+    app running this server, which is the user's decision."""
     if key:
-        done = win.press(INSTALL, key.strip().lower())
+        k = key.strip().lower()
+        if k in ("return", "enter", "delete") and not confirm:
+            raise ValueError(f"'{k}' can answer a dialog or delete a selection, so it needs confirm=True after the user's yes.")
+        done = win.press(INSTALL, k)
+        return [*_window_shot({"done": done})]
+    if "size" not in _LAST_SHOT:
+        raise ValueError("Take slicer_screenshot first, then click on something in it.")
+    items = _LAST_SHOT["items"]
+    if text:
+        hit = win.find_text(items, text, occurrence)
+        px, py = hit["point"]
+    elif x is not None and y is not None:
+        px, py = x, y
     else:
-        if "size" not in _LAST_SHOT:
-            raise ValueError("Take slicer_screenshot first, then click on coordinates in that image.")
-        done = win.click(INSTALL, x, y, _LAST_SHOT["size"], bool(double))
-    return [*_window_shot(), json.dumps(done)]
+        raise ValueError("Give text, or both x and y, or key.")
+    guarded = win.guarded_at(items, px, py)
+    if guarded and not confirm:
+        raise ValueError(f"That's the '{guarded}' button, which starts, sends, stops or discards something. Ask the user; "
+                         "click it with confirm=True only after they say yes to exactly that.")
+    done = win.click(INSTALL, px, py, _LAST_SHOT["size"], bool(double))
+    return [*_window_shot({"done": done})]
+
+
+@mcp.tool(title="Cloud printer status (through the slicer window)",
+          annotations=_ann("Cloud printer status (through the slicer window)", open_world=True))
+@threaded
+def cloud_printer_status() -> list:
+    """Read a printer that's on Anycubic Cloud (LAN mode off) from the slicer window's Workbench screen.
+
+    Use it instead of printer_status when the printer's LAN mode is off, or when printer_status can't reach it. It
+    switches the window to Workbench > Cloud Printer and reads it: printer and state (busy, idle, offline), job name,
+    status and progress, layer, time left and total, estimated finish, nozzle and bed temperatures and targets, part
+    fan, speed mode, firmware and the loaded slots. Returns the screenshot too: read values off it when a field is
+    missing. Changes nothing on the printer; it only switches the window's tab. macOS only, needs the slicer open and
+    signed in, plus Screen Recording and Accessibility permission for the app running this server."""
+    meta, items, data = cloud.workbench(INSTALL)
+    _remember(meta, items)
+    return [Image(data=cloud.SHOT.read_bytes(), format="png"), json.dumps(data)]
+
+
+@mcp.tool(title="Print through the slicer window (Anycubic Cloud)",
+          annotations=_ann("Print through the slicer window (Anycubic Cloud)", destructive=True, idempotent=False,
+                           open_world=True))
+@threaded
+def print_from_slicer(
+    confirm: Annotated[bool, Field(description="False (default) opens and reads the Start Print dialog. Set True only after the user has said yes to this print in this conversation.")] = False,
+) -> list:
+    """Start the plate that's open in the slicer window on a cloud printer, through the window's own Start Print
+    dialog, after the user confirms.
+
+    Use it when the printer's LAN mode is off (send_print needs LAN mode). First open the file with the right presets
+    (restart_slicer with open_path and presets, or open_in_slicer) and slice it in the window. Then call this without
+    confirm: it presses Remote Print and reads the dialog (task name, time, weight, filaments, printer and its state,
+    whether Start Print is enabled) and leaves the dialog open for the user to see. Show the user, ask them to check
+    the bed is empty, and only on an explicit yes call again with confirm=True: it checks the dialog still shows the
+    same task and time, presses Start Print, and waits for the upload to finish (up to 2 minutes). The slicer does the
+    upload through the user's Anycubic account; this server never sees its login. Starting a print heats the nozzle
+    and bed and moves the head; never do it on your own initiative. Filament-to-slot mapping is whatever the dialog
+    shows: check it in the screenshot, and change it with slicer_click before confirming if it's wrong."""
+    meta, items, out = cloud.print_from_slicer(INSTALL, bool(confirm), _LAST_CLOUD_PREVIEW or None)
+    if not confirm:
+        _LAST_CLOUD_PREVIEW.clear()
+        _LAST_CLOUD_PREVIEW.update(task=out["dialog"].get("task"), time=out["dialog"].get("time"))
+    else:
+        _LAST_CLOUD_PREVIEW.clear()
+    _remember(meta, items)
+    out.setdefault("text", win.compact(items))
+    return [Image(data=cloud.SHOT.read_bytes(), format="png"), json.dumps(out)]
 
 
 # ======================================================================== prompts

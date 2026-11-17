@@ -175,7 +175,9 @@ def fetch_info(host: str, client=None) -> dict:
     except Exception as e:  # noqa: BLE001 - connection errors vary by platform
         raise PrinterError(f"No Anycubic printer answered at {host}:{INFO_PORT} ({type(e).__name__}). Check the IP, "
                            "that the printer is on and in LAN mode (Settings > Network > LAN Mode; not switchable "
-                           "during a print), and that this computer is on the same network.") from None
+                           "during a print), and that this computer is on the same network. With LAN mode off the "
+                           "printer is on Anycubic Cloud and closes this port: use cloud_printer_status and "
+                           "print_from_slicer, which go through the slicer window.") from None
     finally:
         if own:
             client.close()
@@ -227,8 +229,9 @@ def handshake(host: str, client=None) -> Credentials:
     try:
         info = fetch_info(host, client)
         if info.get("ctrlType") != "lan":
-            raise PrinterError("LAN mode is off on this printer. On the printer's screen open Settings > Network > "
-                               "LAN Mode and switch it on (this disconnects it from Anycubic Cloud), then try again.")
+            raise PrinterError("LAN mode is off on this printer. Either use cloud_printer_status and print_from_slicer, "
+                               "which go through the slicer window and Anycubic Cloud, or switch LAN mode on at the "
+                               "printer's Settings > Network > LAN Mode (this disconnects it from Anycubic Cloud).")
         token = str(info.get("token") or "")
         if len(token) < 32:
             raise PrinterError("This printer's LAN handshake isn't supported (older firmware or model).")
@@ -330,7 +333,9 @@ def find(subnet: str | None = None) -> dict:
     if not found:
         out["hint"] = ("No printer answered. A printer only shows up here with LAN mode on: on its screen open Settings > "
                        "Network > LAN Mode (it can't be switched while a print is running or paused). That screen also "
-                       "shows its IP. Also check this computer is on the same Wi-Fi and not a guest network.")
+                       "shows its IP. Also check this computer is on the same Wi-Fi and not a guest network. If the "
+                       "printer is meant to stay on Anycubic Cloud (LAN mode off), use cloud_printer_status and "
+                       "print_from_slicer instead; they go through the slicer window.")
     return out
 
 

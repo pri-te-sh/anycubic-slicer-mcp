@@ -394,7 +394,8 @@ def test_every_tool_is_documented():
     assert len(tools) >= 25
     for t in tools:
         assert t.annotations and t.annotations.title, t.name
-        printer_tool = t.name in {"find_printers", "printer_status", "printer_camera_snapshot", "control_print", "send_print"}
+        printer_tool = t.name in {"find_printers", "printer_status", "printer_camera_snapshot", "control_print", "send_print",
+                                    "cloud_printer_status", "print_from_slicer"}
         assert t.annotations.openWorldHint is printer_tool, t.name
         assert t.description and len(t.description) > 80, t.name
         for key, prop in t.inputSchema.get("properties", {}).items():

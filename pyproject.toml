@@ -20,6 +20,7 @@ dependencies = [
     "cryptography>=42",
     "pyobjc-framework-Quartz>=10; sys_platform == 'darwin'",
     "pyobjc-framework-ApplicationServices>=10; sys_platform == 'darwin'",
+    "pyobjc-framework-Vision>=10; sys_platform == 'darwin'",
 ]
 keywords = ["mcp", "model-context-protocol", "anycubic", "anycubic-slicer-next", "kobra", "3d-printing",
             "slicer", "gcode", "ai", "claude", "cursor", "antigravity"]
