@@ -161,6 +161,20 @@ def test_older_user_presets_still_reach_the_per_nozzle_settings(lib, fake_instal
     assert lib.resolve("filament", "Vendor PETG @Test")["nozzle_temperature_HS"] == ["240"]  # system untouched
 
 
+def test_save_user_preset_on_a_user_preset_keeps_the_new_value(lib, fake_install, monkeypatch):
+    import asyncio
+    from anycubic_slicer_mcp import server
+    monkeypatch.setattr(server, "LIB", lib)
+    lib.write_user_preset("filament", {"name": "Mid PETG", "inherits": "Vendor PETG @Test", "from": "User",
+                                       "instantiation": "true", "nozzle_temperature": ["245"], "fan_max_speed": ["40"]})
+    out = asyncio.run(server.save_user_preset(kind="filament", name="Top PETG", inherits="Mid PETG",
+                                              settings={"nozzle_temperature": 238}))
+    saved = json.loads(Path(out["saved"]).read_text())
+    assert saved["inherits"] == "Vendor PETG @Test"  # rebased: the window only loads presets with a system parent
+    assert saved["nozzle_temperature"] == saved["nozzle_temperature_HS"] == ["238"]
+    assert saved["fan_max_speed"] == ["40"]  # what the middle preset changed is kept
+
+
 def test_checked_file(tmp_path):
     f = tmp_path / "a.stl"; f.write_text("solid")
     assert checked_file(str(f), {".stl"}) == f.resolve()

@@ -3,7 +3,7 @@
   "name": "io.github.pri-te-sh/anycubic-slicer-mcp",
   "title": "Anycubic Slicer MCP",
   "description": "Let AI agents slice, preview and diagnose 3D prints with Anycubic Slicer Next, and watch the printer",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "repository": {
     "url": "https://github.com/pri-te-sh/anycubic-slicer-mcp",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "anycubic-slicer-mcp",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "transport": {
         "type": "stdio"
       }

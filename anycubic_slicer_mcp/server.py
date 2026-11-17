@@ -57,6 +57,7 @@ control_print's pause, resume and stop, and the camera start/stop of printer_cam
 """
 
 mcp = FastMCP("anycubic-slicer", instructions=INSTRUCTIONS)
+mcp._mcp_server.version = __version__  # report this package's version to clients, not the MCP library's
 INSTALL = find_install()
 LIB = PresetLibrary(INSTALL)
 SLICER = Slicer(INSTALL, LIB)
@@ -229,6 +230,11 @@ def save_user_preset(
             raise ValueError(f"'{key}' can't be set here.")
         router.check_key(key)
         data[key] = format_value(value, base.get(key, [] if parent.kind == "filament" else ""))
+    from .presets import NOZZLE_VARIANTS
+    for key in settings:  # per-nozzle copies carried over from a user parent would outrank the new value
+        for suffix in NOZZLE_VARIANTS:
+            if key + suffix not in settings:
+                data.pop(key + suffix, None)
     if printer and parent.kind != "machine":
         data["compatible_printers"] = [_printer(printer)]
     if parent.kind == "filament":
