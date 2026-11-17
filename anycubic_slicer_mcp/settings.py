@@ -8,12 +8,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from .presets import KINDS, PresetLibrary
+from .presets import KINDS, NOZZLE_VARIANTS, PresetLibrary
 
 # Settings that make the slicer run external programs. Never settable through this server.
 FORBIDDEN = {"post_process", "post_process_script", "filename_format_post_process"}
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,80}$")
-NOZZLE_VARIANTS = ("_HS", "_BRASS")
 
 
 class SettingError(ValueError):

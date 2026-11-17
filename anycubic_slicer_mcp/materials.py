@@ -1,9 +1,7 @@
 """Filament materials, and turning what's printed on a spool label into a slicer filament preset."""
 from __future__ import annotations
 
-import json
 import re
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -178,14 +176,5 @@ def _notes(info: LabelInfo, material: str) -> str:
 
 
 def save_profile(lib: PresetLibrary, profile: dict[str, Any], overwrite: bool = False) -> Path:
-    folder = lib.user_preset_dir("filament")
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"{profile['name']}.json"
-    if path.exists() and not overwrite:
-        raise FileExistsError(f"A filament preset named '{profile['name']}' already exists (pass overwrite=True).")
-    path.write_text(json.dumps(profile, indent=4), encoding="utf-8")
-    info = path.with_suffix(".info")
-    info.write_text(f"sync_info = \nuser_id = \nsetting_id = \nbase_id = \nupdated_time = {int(time.time())}\n",
-                    encoding="utf-8")
-    lib.reload()
-    return path
+    """Write the filament preset where the slicer window will list it (see write_user_preset)."""
+    return lib.write_user_preset("filament", profile, overwrite=overwrite)[0]

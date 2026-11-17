@@ -8,6 +8,7 @@ settings are the parent's settings overlaid with its own. Hidden base presets ha
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -15,6 +16,9 @@ from typing import Any, Iterable
 from .install import Install
 
 KINDS = ("machine", "process", "filament")
+# Kobra X presets keep per-nozzle copies of some settings (nozzle_temperature_HS, ..._BRASS) and the
+# slicer uses those copies, so a value set on the plain key has to reach them too.
+NOZZLE_VARIANTS = ("_HS", "_BRASS")
 _META_KEYS = {"inherits", "instantiation", "from", "name", "type", "setting_id", "version",
               "is_custom_defined", "base_id", "filament_id", "user_id", "updated_time"}
 
@@ -154,6 +158,8 @@ class PresetLibrary:
         merged: dict[str, Any] = {}
         for preset in reversed(chain):
             merged.update(preset.raw)
+            if preset.source != "system":
+                spread_to_variants(merged, preset.raw)
         merged["name"] = name
         return merged
 
@@ -232,6 +238,64 @@ class PresetLibrary:
     def user_preset_dir(self, kind: str) -> Path:
         return self.install.data_dir / "user" / self.user_folder / _kind(kind)
 
+    def user_folders(self) -> list[str]:
+        """Every preset folder the slicer window might read: the active one first, then 'default' and each
+        signed-in account's folder. The window switches between them when the user signs in or out."""
+        root = self.install.data_dir / "user"
+        found = [p.name for p in sorted(root.iterdir()) if p.is_dir()] if root.is_dir() else []
+        names = [self.user_folder, "default", *[n for n in found if n.isdigit()]]
+        return list(dict.fromkeys(names))
+
+    def system_root(self, kind: str, name: str) -> Preset | None:
+        """The system preset a preset ultimately inherits from (itself if it's a system preset)."""
+        kind = _kind(kind)
+        current = self.all(kind).get(name)
+        for _ in range(32):
+            if current is None or current.source == "system":
+                return current
+            parent = current.parent
+            current = self.system[kind].get(parent) or self.user[kind].get(parent) if parent else None
+        return None
+
+    def write_user_preset(self, kind: str, data: dict[str, Any], overwrite: bool = False) -> list[Path]:
+        """Write a user preset the way the slicer window saves its own, so the window lists it.
+
+        The window skips a user preset without "version", and one whose .info file has no base_id. The
+        preset must inherit straight from a system preset. Values set on a plain key are copied to the
+        per-nozzle variants the parent has. It's written into every account folder (see user_folders).
+        """
+        kind = _kind(kind)
+        name = str(data["name"])
+        parent = self.system[kind].get(str(data.get("inherits") or ""))
+        if parent is None:
+            raise PresetError(f"A user {kind} preset has to inherit from a system preset.")
+        base = self.resolve(kind, parent.name)
+        out = dict(data)
+        for key in list(data):
+            for suffix in NOZZLE_VARIANTS:
+                if key + suffix in base and key + suffix not in data:
+                    out[key + suffix] = data[key]
+        out.setdefault("version", parent.raw.get("version") or "1.0.0.0")
+        out.setdefault("is_custom_defined", "0")
+        base_id = str(parent.raw.get("setting_id") or parent.name)
+        folders = self.user_folders()
+        first_path = self.install.data_dir / "user" / folders[0] / kind / f"{name}.json"
+        if first_path.exists() and not overwrite:
+            raise FileExistsError(f"A {kind} preset named '{name}' already exists (pass overwrite=True).")
+        written = []
+        for folder in folders:
+            d = self.install.data_dir / "user" / folder / kind
+            d.mkdir(parents=True, exist_ok=True)
+            path = d / f"{name}.json"
+            path.write_text(json.dumps(out, indent=4), encoding="utf-8")
+            user_id = folder if folder.isdigit() else ""
+            path.with_suffix(".info").write_text(
+                f"sync_info = \nuser_id = {user_id}\nsetting_id = \nbase_id = {base_id}\n"
+                f"updated_time = {int(time.time())}\n", encoding="utf-8")
+            written.append(path)
+        self.reload()
+        return written
+
     def known_keys(self, kind: str) -> set[str]:
         keys: set[str] = set()
         for preset in self.all(_kind(kind)).values():
@@ -254,7 +318,17 @@ def flatten_for_cli(settings: dict[str, Any]) -> dict[str, Any]:
     flat["inherits"] = ""
     flat.setdefault("from", "system")
     flat["instantiation"] = "true"
+    if flat.get("default_filament_colour") and not flat.get("filament_colour"):
+        flat["filament_colour"] = flat["default_filament_colour"]  # otherwise the slicer paints it orange
     return flat
+
+
+def spread_to_variants(merged: dict[str, Any], layer: dict[str, Any]) -> None:
+    """Copy each plain key a preset layer sets onto the per-nozzle variants it didn't set itself."""
+    for key, value in layer.items():
+        for suffix in NOZZLE_VARIANTS:
+            if key + suffix in merged and key + suffix not in layer:
+                merged[key + suffix] = value
 
 
 def as_list(value: Any) -> list[Any]:

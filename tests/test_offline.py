@@ -120,6 +120,47 @@ def test_scan_3mf(tmp_path):
             scan_3mf(_3mf(tmp_path, {"Metadata/project_settings.config": evil}))
 
 
+def test_scan_3mf_accepts_the_slicers_own_gcode_metadata(tmp_path):
+    # every .gcode.3mf the slicer writes has an empty "; post_process =" line followed by more settings
+    meta = b"; ooze_prevention = 0\n; post_process = \n; precise_outer_wall = 0\n"
+    scan_3mf(_3mf(tmp_path, {"Metadata/plate_1.gcode.metadata": meta}))
+    with pytest.raises(ValueError):
+        scan_3mf(_3mf(tmp_path, {"Metadata/plate_1.gcode.metadata": b"; post_process = /bin/sh\n; x = 0\n"}))
+
+
+def test_user_presets_are_written_so_the_window_lists_them(lib, fake_install):
+    (fake_install.data_dir / "user" / "default").mkdir(parents=True)
+    data = {"name": "My PETG", "inherits": "Vendor PETG @Test", "from": "User", "instantiation": "true",
+            "nozzle_temperature": ["250"], "default_filament_colour": ["#EFF0F1"]}
+    paths = lib.write_user_preset("filament", data)
+    assert {p.parent.parent.name for p in paths} == {"123", "default"}  # signed in and signed out
+    for p in paths:
+        saved = json.loads(p.read_text())
+        assert saved["version"] and saved["is_custom_defined"] == "0"
+        assert saved["nozzle_temperature_HS"] == ["250"]  # the per-nozzle copy the slicer actually uses
+        info = p.with_suffix(".info").read_text()
+        assert "base_id = Vendor PETG @Test" in info
+        assert ("user_id = 123" in info) == (p.parent.parent.name == "123")
+    with pytest.raises(FileExistsError):
+        lib.write_user_preset("filament", data)
+    with pytest.raises(PresetError):
+        lib.write_user_preset("filament", {**data, "name": "x", "inherits": "My PETG"})  # parent must be system
+
+
+def test_older_user_presets_still_reach_the_per_nozzle_settings(lib, fake_install):
+    folder = fake_install.data_dir / "user" / "123" / "filament"
+    folder.mkdir(parents=True)
+    (folder / "Old PETG.json").write_text(json.dumps({
+        "name": "Old PETG", "inherits": "Vendor PETG @Test", "from": "User", "instantiation": "true",
+        "nozzle_temperature": ["235"], "default_filament_colour": ["#112233"]}))
+    lib.reload()
+    flat = flatten_for_cli(lib.resolve("filament", "Old PETG"))
+    assert flat["nozzle_temperature"] == flat["nozzle_temperature_HS"] == ["235"]
+    assert flat["filament_colour"] == ["#112233"]
+    assert lib.system_root("filament", "Old PETG").name == "Vendor PETG @Test"
+    assert lib.resolve("filament", "Vendor PETG @Test")["nozzle_temperature_HS"] == ["240"]  # system untouched
+
+
 def test_checked_file(tmp_path):
     f = tmp_path / "a.stl"; f.write_text("solid")
     assert checked_file(str(f), {".stl"}) == f.resolve()

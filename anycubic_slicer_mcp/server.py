@@ -207,7 +207,15 @@ def save_user_preset(
     router = SettingRouter(LIB)
     protected = {"name", "inherits", "from", "instantiation", "compatible_printers", "compatible_printers_condition",
                  "setting_id", "filament_id", "type"}
-    data: dict[str, Any] = {"name": name, "inherits": parent.name, "from": "User", "instantiation": "true"}
+    root = LIB.system_root(parent.kind, parent.name)
+    if root is None:
+        raise ValueError(f"'{parent.name}' doesn't lead back to a system preset, so the slicer window couldn't load it.")
+    data: dict[str, Any] = {"name": name, "inherits": root.name, "from": "User", "instantiation": "true"}
+    if root.name != parent.name:  # the window only loads user presets whose parent is a system preset
+        root_cfg = LIB.resolve(root.kind, root.name)
+        meta = protected | {"version", "is_custom_defined", "base_id", "user_id", "updated_time",
+                            "filament_settings_id", "print_settings_id", "printer_settings_id"}
+        data.update({k: v for k, v in base.items() if k not in meta and root_cfg.get(k) != v})
     for key, value in settings.items():
         if key in protected:
             raise ValueError(f"'{key}' can't be set here.")
@@ -219,15 +227,10 @@ def save_user_preset(
         data["filament_settings_id"] = [name]
     elif parent.kind == "process":
         data["print_settings_id"] = name
-    folder = LIB.user_preset_dir(parent.kind)
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"{name}.json"
-    if path.exists() and not overwrite:
-        raise FileExistsError(f"'{name}' already exists; pass overwrite=True to replace it.")
-    path.write_text(json.dumps(data, indent=4), encoding="utf-8")
-    LIB.reload()
-    return {"saved": str(path), "kind": parent.kind, "inherits": parent.name,
-            "note": "Restart Anycubic Slicer Next to see it in the GUI."}
+    paths = LIB.write_user_preset(parent.kind, data, overwrite=overwrite)
+    return {"saved": str(paths[0]), "also_in": [str(x.parent.parent.name) for x in paths[1:]],
+            "kind": parent.kind, "inherits": root.name,
+            "note": "The slicer window lists it after a restart (restart_slicer)."}
 
 
 # ======================================================================== models & slicing

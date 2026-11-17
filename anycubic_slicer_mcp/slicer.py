@@ -56,7 +56,8 @@ def _allow_network() -> bool:
 
 _PP_JSON = re.compile(rb'"post_process"\s*:\s*(\[[^\]]*\]|"[^"]*")')
 _PP_XML = re.compile(rb'key="post_process"\s+value="([^"]*)"')
-_PP_INI = re.compile(rb"^;?\s*post_process\s*=\s*(.*)$", re.M)
+# [ \t] not \s: an empty "; post_process =" must not swallow the newline and read the next line as its value
+_PP_INI = re.compile(rb"^;?[ \t]*post_process[ \t]*=[ \t]*(.*?)[ \t\r]*$", re.M)
 
 
 def scan_3mf(path: Path) -> None:
